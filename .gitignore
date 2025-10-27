@@ -1,0 +1,26 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# AWS credentials (¡Nunca subas esto!)
+*.pem
+*.key
+*.crt
+
+# Lambda build artifacts
+__pycache__/
+*.pyc
+*.zip
+node_modules/
+*.log
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Git Bash crash dumps
+*.stackdump
