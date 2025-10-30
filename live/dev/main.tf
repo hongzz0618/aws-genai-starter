@@ -31,7 +31,7 @@ resource "aws_iam_policy" "lambda_dynamodb" {
     Statement = [{
       Sid    = "ChatTableRW",
       Effect = "Allow",
-      Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"],
+      Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchWriteItem"],
       Resource = [
         module.chat_table.table_arn,
         "${module.chat_table.table_arn}/index/*"
@@ -57,7 +57,11 @@ module "lambda_api" {
   timeout_seconds    = 15
   log_retention_days = 14
   environment = {
-    CHAT_TABLE = module.chat_table.table_name
+    CHAT_TABLE    = module.chat_table.table_name
+    MODEL_ID      = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    HISTORY_TURNS = "10"
+    TEMPERATURE   = "0.2"
+    MAX_TOKENS    = "1024"
   }
   tags = var.tags
 }
