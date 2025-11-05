@@ -12,6 +12,7 @@ on:
     paths:
       - "modules/**"
       - "live/dev/**"
+      - ".github/workflows/**"
 
 permissions:
   id-token: write
