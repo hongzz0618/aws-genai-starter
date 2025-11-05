@@ -1,33 +1,111 @@
-name: Terraform Main
+name: Terraform DEV (main)
 
 on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "modules/**"
+      - "live/dev/**"
+      - ".github/workflows/**"
   push:
     branches: [ "main" ]
+    paths:
+      - "modules/**"
+      - "live/dev/**"
 
 permissions:
   id-token: write
   contents: read
+  pull-requests: write
+
+env:
+  AWS_REGION: us-east-1
+  TF_IN_AUTOMATION: "true"
 
 jobs:
-  deploy:
+  plan:
+    name: Plan (PR → main)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     defaults:
       run:
+        shell: bash
         working-directory: live/dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_DEV_ARN }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-terraform-dev
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Cache Terraform plugins
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            live/dev/.terraform
+          key: ${{ runner.os }}-tf-${{ hashFiles('**/*.tf', '**/*.tfvars') }}
+          restore-keys: |
+            ${{ runner.os }}-tf-
+
+      - name: Terraform Fmt
+        run: terraform fmt -check -recursive
 
       - name: Terraform Init
-        run: terraform init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -no-color -lock-timeout=5m -out=tfplan
+
+      - name: Show Plan (summary)
+        run: terraform show -no-color tfplan | sed -n '1,200p'
+
+  apply:
+    name: Apply (push → main)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: terraform-dev-main
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: bash
+        working-directory: live/dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_DEV_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-terraform-dev
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Plan (safety)
+        run: terraform plan -input=false -no-color -lock-timeout=5m
 
       - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve -lock-timeout=5m
