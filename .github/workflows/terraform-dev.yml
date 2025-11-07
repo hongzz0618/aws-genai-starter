@@ -96,9 +96,6 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-terraform-dev
       
-      - name: WhoAmI
-        run: aws sts get-caller-identity
-
       - name: Package Lambda
         run: |
           chmod +x scripts/package_lambda.sh
