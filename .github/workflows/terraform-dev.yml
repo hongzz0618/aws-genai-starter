@@ -39,7 +39,7 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_DEV_ARN }}
+          role-to-assume: arn:aws:iam::304455542178:role/github-actions-deploy-main
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-terraform-dev
 
@@ -95,7 +95,7 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_DEV_ARN }}
+          role-to-assume: arn:aws:iam::304455542178:role/github-actions-deploy-main
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-terraform-dev
 
