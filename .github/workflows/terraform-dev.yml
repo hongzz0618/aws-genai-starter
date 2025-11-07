@@ -108,8 +108,18 @@ jobs:
       - name: Terraform Init
         run: terraform init -input=false
 
-      - name: Terraform Plan (safety)
-        run: terraform plan -input=false -no-color -lock-timeout=5m
+      - name: Terraform Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -no-color -lock-timeout=5m -detailed-exitcode -out=tfplan
+          code=$?
+          echo "exit_code=$code" >> $GITHUB_OUTPUT
+          if [ "$code" -eq 1 ]; then
+            echo "Terraform plan failed"; exit 1; fi
+          if [ "$code" -eq 0 ]; then
+            echo "No changes to apply"; fi
 
       - name: Terraform Apply
+        if: steps.plan.outputs.exit_code == '2'
         run: terraform apply -input=false -auto-approve -lock-timeout=5m
