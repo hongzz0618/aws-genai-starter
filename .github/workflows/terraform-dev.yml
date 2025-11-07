@@ -43,6 +43,9 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-terraform-dev
 
+      - name: WhoAmI
+        run: aws sts get-caller-identity
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
