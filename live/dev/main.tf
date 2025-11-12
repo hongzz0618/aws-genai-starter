@@ -78,3 +78,37 @@ module "api_http" {
   }
   tags = var.tags
 }
+
+module "observability" {
+  source      = "../modules/observability"
+  project     = "genai-api"
+  environment = "dev"
+  region      = var.region
+
+  tags = {
+    Owner      = "genai-api"
+  }
+
+  # Lista exacta de nombres de Lambda
+  lambda_function_names = [
+    "genai-router-dev",
+    "bedrock-invoke-dev"
+  ]
+
+  # Selecciona tipo de API
+  api_gw_type       = "http_v2"
+  apigw_http_api_id = "8et6jw1qs7"
+  apigw_stage_name  = "dev"
+
+  dynamodb_table_name = "chat_history-dev"
+
+  alarm_email = "1084325862@qq.com"
+
+  monthly_budget_amount            = 25
+  currency                         = "EUR"
+  lambda_duration_p95_threshold_ms = 2000
+  apigw_latency_p95_threshold_ms   = 1500
+
+  throttling_rate_limit  = 50
+  throttling_burst_limit = 100
+}
