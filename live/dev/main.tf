@@ -80,7 +80,7 @@ module "api_http" {
 }
 
 module "observability" {
-  source      = "../modules/observability"
+  source      = "../../modules/observability"
   project     = "genai-api"
   environment = "dev"
   region      = var.region
