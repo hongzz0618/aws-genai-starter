@@ -401,15 +401,9 @@ resource "aws_ce_anomaly_subscription" "service_subscription" {
   monitor_arn_list = [aws_ce_anomaly_monitor.service.arn]
 
   threshold_expression {
-    or {
-      dimension {
-        key    = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
-        values = ["5"]
-      }
-      dimension {
-        key    = "ANOMALY_TOTAL_IMPACT_PERCENTAGE"
-        values = ["40"]
-      }
+    dimension {
+      key    = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+      values = ["5"]
     }
   }
 
