@@ -388,7 +388,7 @@ resource "aws_ce_anomaly_monitor" "service" {
 
 resource "aws_ce_anomaly_subscription" "service_subscription" {
   name             = "${var.project}-${var.environment}-service-anomaly-sub"
-  frequency        = "DAILY"
+  frequency        = "IMMEDIATE"
   monitor_arn_list = [aws_ce_anomaly_monitor.service.arn]
 
   threshold_expression {
