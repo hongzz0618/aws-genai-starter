@@ -18,6 +18,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Package Lambda
+        run: |
+          chmod +x scripts/package_lambda.sh
+          ./scripts/package_lambda.sh
+        working-directory: ${{ github.workspace }}
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
