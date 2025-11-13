@@ -105,7 +105,7 @@ module "observability" {
   alarm_email = "1084325862@qq.com"
 
   monthly_budget_amount            = 25
-  currency                         = "EUR"
+  currency                         = "USD"
   lambda_duration_p95_threshold_ms = 2000
   apigw_latency_p95_threshold_ms   = 1500
 

@@ -72,7 +72,7 @@ variable "monthly_budget_amount" {
 variable "currency" {
   description = "Moneda del presupuesto"
   type        = string
-  default     = "EUR"
+  default     = "USD"
 }
 
 variable "lambda_duration_p95_threshold_ms" {

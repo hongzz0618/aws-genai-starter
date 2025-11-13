@@ -126,12 +126,9 @@ resource "aws_cloudwatch_log_metric_filter" "lambda_error_filter" {
   pattern        = "?ERROR ?Error ?Exception ?Traceback"
 
   metric_transformation {
-    name      = "LambdaErrorCount"
+    name      = "LambdaErrorCount_${each.key}"
     namespace = "Custom/Lambda"
     value     = "1"
-    dimensions = {
-      FunctionName = each.key
-    }
   }
 }
 
@@ -153,21 +150,15 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   alarm_name          = "${each.key}-Errors-Alarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 1
-  metric_name         = "LambdaErrorCount"
+  metric_name         = "LambdaErrorCount_${each.key}"
   namespace           = "Custom/Lambda"
   period              = 60
   statistic           = "Sum"
   threshold           = 1
-
-  dimensions = {
-    FunctionName = each.key
-  }
-
-  alarm_description = "Errores detectados en ${each.key}"
-  alarm_actions     = [aws_sns_topic.alerts.arn]
-  ok_actions        = [aws_sns_topic.alerts.arn]
-
-  tags = local.common_tags
+  alarm_description   = "Errores detectados en ${each.key}"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  tags                = local.common_tags
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_duration_p95" {
@@ -402,8 +393,9 @@ resource "aws_ce_anomaly_subscription" "service_subscription" {
 
   threshold_expression {
     dimension {
-      key    = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
-      values = ["5"]
+      key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+      match_options = ["GREATER_THAN_OR_EQUAL"]
+      values        = ["5"]
     }
   }
 
