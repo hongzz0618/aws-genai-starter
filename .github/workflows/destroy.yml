@@ -10,20 +10,37 @@ jobs:
       id-token: write
       contents: read
 
+    env:
+      TF_IN_AUTOMATION: true
+      AWS_REGION: us-east-1
+
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_DEV_ARN }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Version
+        run: terraform version
 
       - name: Terraform Init
         working-directory: ./live/dev
-        run: terraform init
+        run: terraform init -input=false
+
+      - name: Terraform Plan Destroy
+        working-directory: ./live/dev
+        run: terraform plan -destroy -out=tfplan -input=false
 
       - name: Terraform Destroy
         working-directory: ./live/dev
-        run: terraform destroy -auto-approve
+        run: terraform destroy -auto-approve -input=false
