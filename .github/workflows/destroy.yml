@@ -1,0 +1,29 @@
+name: Destroy AWS Infra
+
+on:
+  workflow_dispatch
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_DEV_ARN }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        working-directory: ./live/dev
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: ./live/dev
+        run: terraform destroy -auto-approve
