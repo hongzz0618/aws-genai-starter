@@ -80,9 +80,10 @@ resource "aws_apigatewayv2_stage" "http_stage" {
 
 # REST API (v1)
 resource "aws_api_gateway_stage" "rest_stage" {
-  count       = var.api_gw_type == "rest_v1" ? 1 : 0
-  rest_api_id = var.apigw_rest_api_id
-  stage_name  = var.apigw_stage_name
+  count         = var.api_gw_type == "rest_v1" && length(var.apigw_rest_deployment_id) > 0 ? 1 : 0
+  rest_api_id   = var.apigw_rest_api_id
+  stage_name    = var.apigw_stage_name
+  deployment_id = var.apigw_rest_deployment_id
 
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.apigw_rest_access[0].arn
@@ -113,7 +114,6 @@ resource "aws_api_gateway_stage" "rest_stage" {
 # -----------------------------
 resource "aws_dynamodb_contributor_insights" "table" {
   table_name = var.dynamodb_table_name
-  enabled    = true
 }
 
 # -----------------------------
@@ -352,8 +352,6 @@ resource "aws_cloudwatch_dashboard" "main" {
       ]
     )
   })
-
-  tags = local.common_tags
 }
 
 # -----------------------------
@@ -401,15 +399,22 @@ resource "aws_ce_anomaly_subscription" "service_subscription" {
   name             = "${var.project}-${var.environment}-service-anomaly-sub"
   frequency        = "DAILY"
   monitor_arn_list = [aws_ce_anomaly_monitor.service.arn]
-  threshold_expression = jsonencode({
-    "Or" : [
-      { "DimensionValues" : { "Key" : "ANOMALY_TOTAL_IMPACT_ABSOLUTE", "Values" : ["5"] } },   # €/$ impacto absoluto
-      { "DimensionValues" : { "Key" : "ANOMALY_TOTAL_IMPACT_PERCENTAGE", "Values" : ["40"] } } # % impacto
-    ]
-  })
+
+  threshold_expression {
+    or {
+      dimension {
+        key    = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+        values = ["5"]
+      }
+      dimension {
+        key    = "ANOMALY_TOTAL_IMPACT_PERCENTAGE"
+        values = ["40"]
+      }
+    }
+  }
+
   subscriber {
     type    = "SNS"
     address = aws_sns_topic.alerts.arn
   }
-  tags = local.common_tags
 }

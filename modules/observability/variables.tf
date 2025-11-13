@@ -103,3 +103,9 @@ variable "throttling_burst_limit" {
   type        = number
   default     = 100
 }
+
+variable "apigw_rest_deployment_id" {
+  description = "Deployment ID para API Gateway REST (v1); requerido si api_gw_type == rest_v1 y el módulo gestiona el stage."
+  type        = string
+  default     = ""
+}
