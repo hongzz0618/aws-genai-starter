@@ -32,12 +32,12 @@ We start small and grow safely:
 
 ## 📁 Project structure
 
-/live/dev/           → Terraform environment (dev)
-/modules/            → Reusable Terraform modules
-/scripts/            → Lambda packaging script (zip + dependencies)
-/src/                → Lambda source code (Python)
-/.github/workflows/  → CI/CD pipeline with GitHub Actions (OIDC)
-README.md            → Project overview and roadmap
+- **/live/dev/**: Terraform environment (dev)
+- **/modules/**: Reusable Terraform modules
+- **/scripts/**: Lambda packaging script (zip + dependencies)
+- **/src/**: Lambda source code (Python)
+- **/.github/workflows/**: CI/CD pipeline with GitHub Actions (OIDC)
+- **README.md**: Project overview and roadmap
 
 ---
 
