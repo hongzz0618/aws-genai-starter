@@ -1,0 +1,21 @@
+{
+  "name": "aws-genai-starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript Lambda migration skeleton for aws-genai-starter.",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1048.0",
+    "@aws-sdk/client-dynamodb": "^3.1048.0",
+    "@aws-sdk/lib-dynamodb": "^3.1048.0"
+  }
+}
