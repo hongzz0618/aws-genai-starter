@@ -21,7 +21,7 @@ variable "env" {
 
 variable "lambda_runtime" {
   type    = string
-  default = "python3.12"
+  default = "nodejs22.x"
 }
 
 variable "tags" {

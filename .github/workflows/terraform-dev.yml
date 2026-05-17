@@ -6,12 +6,24 @@ on:
     paths:
       - "modules/**"
       - "live/dev/**"
+      - "src-ts/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/**"
+      - "tsconfig.json"
       - ".github/workflows/**"
   push:
     branches: [ "main" ]
     paths:
       - "modules/**"
       - "live/dev/**"
+      - "src-ts/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/**"
+      - "tsconfig.json"
       - ".github/workflows/**"
 
 permissions:
@@ -35,6 +47,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+        working-directory: ${{ github.workspace }}
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+        working-directory: ${{ github.workspace }}
+
+      - name: Unit tests
+        run: npm test
+        working-directory: ${{ github.workspace }}
+
+      - name: Build TypeScript Lambda
+        run: npm run build
+        working-directory: ${{ github.workspace }}
+
+      - name: Package Lambda
+        run: |
+          chmod +x scripts/package_lambda.sh
+          SKIP_BUILD=true ./scripts/package_lambda.sh
+        working-directory: ${{ github.workspace }}
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -89,6 +129,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+        working-directory: ${{ github.workspace }}
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+        working-directory: ${{ github.workspace }}
+
+      - name: Unit tests
+        run: npm test
+        working-directory: ${{ github.workspace }}
+
+      - name: Build TypeScript Lambda
+        run: npm run build
+        working-directory: ${{ github.workspace }}
+
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -99,7 +161,7 @@ jobs:
       - name: Package Lambda
         run: |
           chmod +x scripts/package_lambda.sh
-          ./scripts/package_lambda.sh
+          SKIP_BUILD=true ./scripts/package_lambda.sh
         working-directory: ${{ github.workspace }}
 
       - name: Setup Terraform

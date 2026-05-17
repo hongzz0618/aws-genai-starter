@@ -88,8 +88,8 @@ variable "apigw_latency_p95_threshold_ms" {
 }
 
 variable "enable_lambda_insights_layer" {
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
 
 variable "throttling_rate_limit" {

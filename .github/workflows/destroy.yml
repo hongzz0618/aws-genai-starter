@@ -18,10 +18,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build TypeScript Lambda
+        run: npm run build
+
       - name: Package Lambda
         run: |
           chmod +x scripts/package_lambda.sh
-          ./scripts/package_lambda.sh
+          SKIP_BUILD=true ./scripts/package_lambda.sh
         working-directory: ${{ github.workspace }}
 
       - name: Setup Terraform

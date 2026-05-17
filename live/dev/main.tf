@@ -45,13 +45,13 @@ resource "aws_iam_role_policy_attachment" "attach_ddb" {
   policy_arn = aws_iam_policy.lambda_dynamodb.arn
 }
 
-# 4) Lambda (zip empaquetado en build/lambda.zip)
+# 4) Lambda (TypeScript build packaged in build/lambda.zip)
 module "lambda_api" {
   source             = "../../modules/lambda_function"
   function_name      = "${var.project}-${local.lambda_fn}"
   role_arn           = module.iam_lambda.role_arn
   runtime            = var.lambda_runtime
-  handler            = "app.handler"
+  handler            = "handler.handler"
   zip_path           = "${path.module}/../../build/lambda.zip"
   memory_size        = 256
   timeout_seconds    = 15
@@ -86,7 +86,7 @@ module "observability" {
   region      = var.region
 
   tags = {
-    Owner      = "genai-api"
+    Owner = "genai-api"
   }
 
   # Lista exacta de nombres de Lambda
