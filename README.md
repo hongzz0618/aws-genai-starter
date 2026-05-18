@@ -53,4 +53,4 @@ We start small and grow safely:
 ## 🙌 Why this project?
 
 It’s a practical, working example of GenAI on AWS.  
-Useful for learning, demos, interviews, or as a starting point for real projects.
+Useful for learning, demos, and as a starting point for experimenting with managed model integration on AWS.
