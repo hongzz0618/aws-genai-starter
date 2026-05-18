@@ -1,3 +1,10 @@
+"""Legacy Python prototype handler.
+
+The deployed Lambda is the TypeScript handler in src-ts, compiled to dist and
+packaged as build/lambda.zip. This file is kept only as historical prototype
+code and should not be used as a production handler.
+"""
+
 import os
 import json
 import time

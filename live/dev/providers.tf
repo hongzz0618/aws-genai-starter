@@ -7,13 +7,17 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket         = "tfstate-acme-dev-us-east-1"
-    key            = "genai/dev/app.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "tfstate-locks"
-    encrypt        = true
-  }
+  # Default state is local so this example can be initialized safely.
+  # For remote state, use placeholder values from backend.hcl.example and
+  # configure real bucket/table names outside the committed defaults.
+  #
+  # backend "s3" {
+  #   bucket         = "example-terraform-state-bucket"
+  #   key            = "aws-genai-starter/dev/terraform.tfstate"
+  #   region         = "us-east-1"
+  #   dynamodb_table = "example-terraform-locks"
+  #   encrypt        = true
+  # }
 }
 
 provider "aws" {

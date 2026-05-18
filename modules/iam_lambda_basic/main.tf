@@ -25,7 +25,7 @@ resource "aws_iam_policy" "bedrock_invoke" {
     Statement = [{
       Effect   = "Allow",
       Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-      Resource = "*"
+      Resource = var.bedrock_model_resource_arns
     }]
   })
 }
