@@ -57,3 +57,9 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Related Reference Hub
+
+This project is part of my AWS Backend Architecture Lab, a reference hub for backend-focused AWS architecture patterns, infrastructure-as-code practice, and engineering trade-offs.
+
+[AWS Architecture Labs](https://github.com/hongzz0618/aws-architecture-labs)
