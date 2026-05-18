@@ -1,6 +1,14 @@
-# GenAI on AWS - Starter Project
+# AWS GenAI Starter
 
-This is a compact example of a GenAI service on AWS. It keeps the active path small: API Gateway, Lambda, DynamoDB, Amazon Bedrock, CI/CD via GitHub OIDC, and basic observability.
+This is a compact reference project for adding managed model capabilities to a serverless backend on AWS. The active request path is API Gateway -> Lambda -> Amazon Bedrock -> DynamoDB, with Terraform definitions for the AWS resources and GitHub Actions checks with an OIDC trust example for future deployment workflows.
+
+## Use case
+
+The project demonstrates a simple backend pattern for applications that need model-assisted responses while still handling normal backend responsibilities: request handling, permissions, persistence, cost, and observability.
+
+## Architecture overview
+
+A client sends a request to API Gateway, which invokes a Lambda function. The Lambda calls the Amazon Bedrock Converse API, stores chat history in DynamoDB, and emits logs and metrics to CloudWatch. IAM modules define boundaries for Lambda access, Bedrock invocation, DynamoDB access, and optional GitHub OIDC trust.
 
 ## What's included
 
@@ -8,7 +16,7 @@ This is a compact example of a GenAI service on AWS. It keeps the active path sm
 - Active Lambda source in TypeScript under `src-ts/`
 - DynamoDB chat history storage
 - Amazon Bedrock Converse API invocation from Lambda
-- GitHub Actions OIDC trust example for deployment
+- GitHub Actions checks with an OIDC trust example for future deployment workflows
 - CloudWatch logs, metrics, alarms, dashboard, SNS alerting, Budgets, and Cost Anomaly Detection examples
 
 ## Project structure
@@ -33,9 +41,21 @@ If you want S3 remote state, use only placeholder examples from `backend.hcl.exa
 
 ## IAM notes
 
-The CI OIDC module no longer attaches broad AWS managed permissions. It creates the GitHub trust relationship only; attach a project- and account-scoped deploy policy before using the role in a real workflow.
+The CI OIDC module only creates the GitHub trust relationship. It does not attach broad AWS managed permissions by default. Attach a project- and account-scoped deploy policy before using the role in a real workflow.
 
 The Lambda Bedrock policy uses configurable Bedrock resource ARNs instead of `Resource = "*"`. The module defaults cover Bedrock foundation-model and inference-profile ARN shapes, but production environments should pass exact regional model or inference-profile ARNs that match the configured `MODEL_ID`.
+
+## Maturity note
+
+This is a learning-oriented reference project for understanding API Gateway, Lambda, Bedrock, DynamoDB, IAM, and observability boundaries. It is not intended to be used as-is for a production deployment.
+
+## Architecture trade-offs
+
+- Managed Bedrock integration keeps model access simple compared with custom model hosting, while leaving model choice and cost controls as explicit configuration concerns.
+- The small serverless path is easier to inspect than a larger platform setup, but it does not include the full controls usually needed for a production environment.
+- DynamoDB is a practical fit for chat history lookup by session, with schema and retention choices kept intentionally simple.
+- OIDC trust avoids broad static credentials, but deploy permissions still need to be scoped for a specific account and workflow.
+- The observability examples provide basic visibility into logs, metrics, alarms, and cost signals, not a full operations model.
 
 ## Demo limitations
 
@@ -60,6 +80,6 @@ npm run build
 
 ## Related Reference Hub
 
-This project is part of my AWS Backend Architecture Lab, a reference hub for backend-focused AWS architecture patterns, infrastructure-as-code practice, and engineering trade-offs.
+This project is part of the AWS Backend Architecture Reference Hub, a reference hub for backend-focused AWS architecture patterns, infrastructure-as-code practice, and engineering trade-offs.
 
 [AWS Architecture Labs](https://github.com/hongzz0618/aws-architecture-labs)
