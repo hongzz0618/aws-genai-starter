@@ -24,6 +24,11 @@ variable "lambda_function_names" {
   type        = list(string)
 }
 
+variable "lambda_log_group_names" {
+  description = "Lambda CloudWatch log group names keyed by Lambda function name."
+  type        = map(string)
+}
+
 variable "api_gw_type" {
   description = "API Gateway type."
   type        = string
@@ -41,21 +46,15 @@ variable "apigw_http_api_id" {
   default     = ""
 }
 
-variable "apigw_rest_api_id" {
-  description = "REST API ID."
+variable "apigw_api_name" {
+  description = "API Gateway API name for REST API metrics."
   type        = string
-  default     = ""
+  default     = null
 }
 
 variable "dynamodb_table_name" {
   description = "DynamoDB table name."
   type        = string
-}
-
-variable "log_retention_days" {
-  description = "Log retention in days."
-  type        = number
-  default     = 30
 }
 
 variable "alarm_email" {
@@ -86,27 +85,4 @@ variable "apigw_latency_p95_threshold_ms" {
   description = "API Gateway p95 latency threshold in milliseconds."
   type        = number
   default     = 1500
-}
-
-variable "enable_lambda_insights_layer" {
-  type    = bool
-  default = true
-}
-
-variable "throttling_rate_limit" {
-  description = "Stage request rate limit."
-  type        = number
-  default     = 50
-}
-
-variable "throttling_burst_limit" {
-  description = "Stage burst limit."
-  type        = number
-  default     = 100
-}
-
-variable "apigw_rest_deployment_id" {
-  description = "Deployment ID for API Gateway REST v1 when this module manages the stage."
-  type        = string
-  default     = ""
 }

@@ -92,10 +92,13 @@ module "observability" {
   lambda_function_names = [
     module.lambda_api.function_name
   ]
+  lambda_log_group_names = {
+    (module.lambda_api.function_name) = module.lambda_api.log_group_name
+  }
 
   api_gw_type       = "http_v2"
   apigw_http_api_id = module.api_http.api_id
-  apigw_stage_name  = var.env
+  apigw_stage_name  = module.api_http.stage_name
 
   dynamodb_table_name = module.chat_table.table_name
 
@@ -105,7 +108,4 @@ module "observability" {
   currency                         = "USD"
   lambda_duration_p95_threshold_ms = 2000
   apigw_latency_p95_threshold_ms   = 1500
-
-  throttling_rate_limit  = 50
-  throttling_burst_limit = 100
 }

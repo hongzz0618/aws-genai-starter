@@ -6,107 +6,9 @@ locals {
     },
     var.tags
   )
-}
 
-data "aws_region" "current" {}
-data "aws_caller_identity" "current" {}
-
-# -----------------------------
-# CloudWatch Log Groups (Lambda + API)
-# -----------------------------
-resource "aws_cloudwatch_log_group" "lambda" {
-  for_each          = toset(var.lambda_function_names)
-  name              = "/aws/lambda/${each.value}"
-  retention_in_days = var.log_retention_days
-  tags              = local.common_tags
-}
-
-# API Gateway HTTP API v2 access logs
-resource "aws_cloudwatch_log_group" "apigw_access" {
-  count             = var.api_gw_type == "http_v2" ? 1 : 0
-  name              = "/aws/apigw/${var.project}-${var.environment}-${var.apigw_stage_name}"
-  retention_in_days = var.log_retention_days
-  tags              = local.common_tags
-}
-
-# API Gateway REST API v1 access logs
-resource "aws_cloudwatch_log_group" "apigw_rest_access" {
-  count             = var.api_gw_type == "rest_v1" ? 1 : 0
-  name              = "/aws/apigw-rest/${var.project}-${var.environment}-${var.apigw_stage_name}"
-  retention_in_days = var.log_retention_days
-  tags              = local.common_tags
-}
-
-# -----------------------------
-# API Gateway Stage Logging + Throttling
-# -----------------------------
-
-# HTTP API (apigatewayv2)
-resource "aws_apigatewayv2_stage" "http_stage" {
-  count       = var.api_gw_type == "http_v2" ? 1 : 0
-  api_id      = var.apigw_http_api_id
-  name        = var.apigw_stage_name
-  auto_deploy = true
-
-  access_log_settings {
-    destination_arn = aws_cloudwatch_log_group.apigw_access[0].arn
-    format = jsonencode({
-      requestId         = "$context.requestId"
-      requestTime       = "$context.requestTime"
-      httpMethod        = "$context.httpMethod"
-      path              = "$context.path"
-      status            = "$context.status"
-      protocol          = "$context.protocol"
-      responseLength    = "$context.responseLength"
-      integrationError  = "$context.integrationErrorMessage"
-      integrationStatus = "$context.integrationStatus"
-      errorMessage      = "$context.error.message"
-      authorizerError   = "$context.authorizer.error"
-      ip                = "$context.identity.sourceIp"
-      userAgent         = "$context.identity.userAgent"
-      latency           = "$context.responseLatency"
-    })
-  }
-
-  # Stage throttling
-  default_route_settings {
-    throttling_rate_limit    = var.throttling_rate_limit
-    throttling_burst_limit   = var.throttling_burst_limit
-    detailed_metrics_enabled = true
-  }
-
-  tags = local.common_tags
-}
-
-# REST API (v1)
-resource "aws_api_gateway_stage" "rest_stage" {
-  count         = var.api_gw_type == "rest_v1" && length(var.apigw_rest_deployment_id) > 0 ? 1 : 0
-  rest_api_id   = var.apigw_rest_api_id
-  stage_name    = var.apigw_stage_name
-  deployment_id = var.apigw_rest_deployment_id
-
-  access_log_settings {
-    destination_arn = aws_cloudwatch_log_group.apigw_rest_access[0].arn
-    format = jsonencode({
-      requestId        = "$context.requestId"
-      ip               = "$context.identity.sourceIp"
-      caller           = "$context.identity.caller"
-      user             = "$context.identity.user"
-      requestTime      = "$context.requestTime"
-      httpMethod       = "$context.httpMethod"
-      resourcePath     = "$context.resourcePath"
-      status           = "$context.status"
-      protocol         = "$context.protocol"
-      responseLength   = "$context.responseLength"
-      errorMessage     = "$context.error.message"
-      integrationError = "$context.integrationErrorMessage"
-      latency          = "$context.responseLatency"
-    })
-  }
-
-  xray_tracing_enabled = true
-
-  tags = local.common_tags
+  apigw_metric_api_identifier = var.api_gw_type == "http_v2" ? var.apigw_http_api_id : coalesce(var.apigw_api_name, var.project)
+  apigw_5xx_metric_name       = var.api_gw_type == "http_v2" ? "5xx" : "5XXError"
 }
 
 # -----------------------------
@@ -120,9 +22,9 @@ resource "aws_dynamodb_contributor_insights" "table" {
 # Metric Filters + Alarms (Lambda Errors via Logs)
 # -----------------------------
 resource "aws_cloudwatch_log_metric_filter" "lambda_error_filter" {
-  for_each       = aws_cloudwatch_log_group.lambda
+  for_each       = var.lambda_log_group_names
   name           = "LambdaErrorFilter-${each.key}"
-  log_group_name = each.value.name
+  log_group_name = each.value
   pattern        = "?ERROR ?Error ?Exception ?Traceback"
 
   metric_transformation {
@@ -189,17 +91,17 @@ resource "aws_cloudwatch_metric_alarm" "apigw_5xx" {
   alarm_name          = "${var.project}-${var.environment}-APIGW-5XX-High"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 1
-  metric_name         = "5xx"
+  metric_name         = local.apigw_5xx_metric_name
   namespace           = "AWS/ApiGateway"
   period              = 60
   statistic           = "Sum"
   threshold           = 1
 
   dimensions = var.api_gw_type == "http_v2" ? {
-    ApiId = var.apigw_http_api_id
+    ApiId = local.apigw_metric_api_identifier
     Stage = var.apigw_stage_name
     } : {
-    ApiName = var.project
+    ApiName = local.apigw_metric_api_identifier
     Stage   = var.apigw_stage_name
   }
 
@@ -221,10 +123,10 @@ resource "aws_cloudwatch_metric_alarm" "apigw_latency_p95" {
   threshold           = var.apigw_latency_p95_threshold_ms
 
   dimensions = var.api_gw_type == "http_v2" ? {
-    ApiId = var.apigw_http_api_id
+    ApiId = local.apigw_metric_api_identifier
     Stage = var.apigw_stage_name
     } : {
-    ApiName = var.project
+    ApiName = local.apigw_metric_api_identifier
     Stage   = var.apigw_stage_name
   }
 
@@ -298,8 +200,8 @@ resource "aws_cloudwatch_dashboard" "main" {
           "properties" : {
             "title" : "API Gateway - 5XX / Latency",
             "metrics" : [
-              ["AWS/ApiGateway", "5xx", var.api_gw_type == "http_v2" ? "ApiId" : "ApiName", var.api_gw_type == "http_v2" ? var.apigw_http_api_id : var.project, "Stage", var.apigw_stage_name, { "stat" : "Sum" }],
-              [".", "Latency", var.api_gw_type == "http_v2" ? "ApiId" : "ApiName", var.api_gw_type == "http_v2" ? var.apigw_http_api_id : var.project, "Stage", var.apigw_stage_name, { "stat" : "p95" }]
+              ["AWS/ApiGateway", local.apigw_5xx_metric_name, var.api_gw_type == "http_v2" ? "ApiId" : "ApiName", local.apigw_metric_api_identifier, "Stage", var.apigw_stage_name, { "stat" : "Sum" }],
+              [".", "Latency", var.api_gw_type == "http_v2" ? "ApiId" : "ApiName", local.apigw_metric_api_identifier, "Stage", var.apigw_stage_name, { "stat" : "p95" }]
             ],
             "region" : var.region,
             "view" : "timeSeries",
@@ -334,7 +236,7 @@ resource "aws_cloudwatch_dashboard" "main" {
               ["AWS/Lambda", "Invocations", "FunctionName", fn, { "stat" : "Sum" }],
               [".", "Errors", "FunctionName", fn, { "stat" : "Sum" }],
               [".", "Duration", "FunctionName", fn, { "stat" : "p95" }],
-              ["Custom/Lambda", "LambdaErrorCount", "FunctionName", fn, { "stat" : "Sum" }]
+              ["Custom/Lambda", "LambdaErrorCount_${fn}", { "stat" : "Sum" }]
             ],
             "region" : var.region,
             "view" : "timeSeries",
