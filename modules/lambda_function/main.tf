@@ -12,7 +12,7 @@ resource "aws_lambda_function" "this" {
   timeout       = var.timeout_seconds
   architectures = [local.arch]
 
-  # Recalcula el deploy si cambia el zip
+  # Refresh the deployment when the zip package changes.
   source_code_hash = filebase64sha256(var.zip_path)
 
   environment {

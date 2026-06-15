@@ -4,7 +4,7 @@ locals {
   lambda_fn   = "api-${var.env}"
 }
 
-# 1) IAM básico para Lambda
+# 1) IAM role for Lambda
 module "iam_lambda" {
   source         = "../../modules/iam_lambda_basic"
   name           = "${local.name_prefix}-lambda"
@@ -12,7 +12,7 @@ module "iam_lambda" {
   tags           = var.tags
 }
 
-# 2) DynamoDB - historial de chat
+# 2) DynamoDB chat history table
 module "chat_table" {
   source       = "../../modules/dynamodb_table"
   name         = local.chat_table
@@ -22,7 +22,7 @@ module "chat_table" {
   tags         = var.tags
 }
 
-# 3) Policy mínima para que Lambda acceda a la tabla
+# 3) Scoped policy for Lambda access to the table
 resource "aws_iam_policy" "lambda_dynamodb" {
   name        = "${local.name_prefix}-lambda-dynamodb"
   description = "Lambda access to chat history DynamoDB"
@@ -66,7 +66,7 @@ module "lambda_api" {
   tags = var.tags
 }
 
-# 5) API Gateway HTTP v2 con rutas /health y /chat
+# 5) API Gateway HTTP v2 routes for /health and /chat
 module "api_http" {
   source      = "../../modules/api_http"
   name        = "${local.name_prefix}-http"
@@ -81,28 +81,25 @@ module "api_http" {
 
 module "observability" {
   source      = "../../modules/observability"
-  project     = "genai-api"
-  environment = "dev"
+  project     = var.project
+  environment = var.env
   region      = var.region
 
   tags = {
-    Owner = "genai-api"
+    Owner = var.project
   }
 
-  # Lista exacta de nombres de Lambda
   lambda_function_names = [
-    "genai-router-dev",
-    "bedrock-invoke-dev"
+    module.lambda_api.function_name
   ]
 
-  # Selecciona tipo de API
   api_gw_type       = "http_v2"
-  apigw_http_api_id = "8et6jw1qs7"
-  apigw_stage_name  = "dev"
+  apigw_http_api_id = module.api_http.api_id
+  apigw_stage_name  = var.env
 
-  dynamodb_table_name = "chat_history-dev"
+  dynamodb_table_name = module.chat_table.table_name
 
-  alarm_email = "1084325862@qq.com"
+  alarm_email = var.alarm_email
 
   monthly_budget_amount            = 25
   currency                         = "USD"

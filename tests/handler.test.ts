@@ -1,5 +1,5 @@
 import type { ConverseCommandInput, ConverseCommandOutput } from "@aws-sdk/client-bedrock-runtime";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createHandler } from "../src-ts/handler";
 import type { ChatRepository } from "../src-ts/chatRepository";
 import type { ChatTurnItem, HttpEvent } from "../src-ts/types";
@@ -168,5 +168,41 @@ describe("handler", () => {
         output_tokens: 4,
       },
     ]);
+  });
+
+  it("returns a generic error when Bedrock fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const repository: ChatRepository = {
+      async queryHistoryMessages() {
+        return [];
+      },
+      async saveTurn() {
+        throw new Error("saveTurn should not be called");
+      },
+    };
+    const bedrockClient = {
+      async converse(): Promise<ConverseCommandOutput> {
+        throw new Error("AccessDeniedException: internal account detail");
+      },
+    };
+
+    try {
+      const response = await createHandler({
+        config: baseConfig,
+        repository,
+        bedrockClient,
+      })({
+        rawPath: "/chat",
+        body: JSON.stringify({ prompt: "hello" }),
+        requestContext: { http: { method: "POST" } },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body)).toEqual({ error: "Chat request failed" });
+      expect(response.body).not.toContain("AccessDeniedException");
+      expect(consoleError).toHaveBeenCalledOnce();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

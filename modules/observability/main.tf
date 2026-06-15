@@ -21,7 +21,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
   tags              = local.common_tags
 }
 
-# Access logs para API Gateway (HTTP API v2)
+# API Gateway HTTP API v2 access logs
 resource "aws_cloudwatch_log_group" "apigw_access" {
   count             = var.api_gw_type == "http_v2" ? 1 : 0
   name              = "/aws/apigw/${var.project}-${var.environment}-${var.apigw_stage_name}"
@@ -29,7 +29,7 @@ resource "aws_cloudwatch_log_group" "apigw_access" {
   tags              = local.common_tags
 }
 
-# Access logs para API Gateway (REST v1)
+# API Gateway REST API v1 access logs
 resource "aws_cloudwatch_log_group" "apigw_rest_access" {
   count             = var.api_gw_type == "rest_v1" ? 1 : 0
   name              = "/aws/apigw-rest/${var.project}-${var.environment}-${var.apigw_stage_name}"
@@ -68,7 +68,7 @@ resource "aws_apigatewayv2_stage" "http_stage" {
     })
   }
 
-  # Throttling por stage
+  # Stage throttling
   default_route_settings {
     throttling_rate_limit    = var.throttling_rate_limit
     throttling_burst_limit   = var.throttling_burst_limit
@@ -132,19 +132,20 @@ resource "aws_cloudwatch_log_metric_filter" "lambda_error_filter" {
   }
 }
 
-# SNS para notificaciones
+# SNS notifications
 resource "aws_sns_topic" "alerts" {
   name = "${var.project}-${var.environment}-alerts"
   tags = local.common_tags
 }
 
 resource "aws_sns_topic_subscription" "email" {
+  count     = var.alarm_email == "" ? 0 : 1
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
   endpoint  = var.alarm_email
 }
 
-# Alarmas por función: errores (desde métrica custom) y duración p95
+# Lambda alarms for errors and p95 duration
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   for_each            = aws_cloudwatch_log_metric_filter.lambda_error_filter
   alarm_name          = "${each.key}-Errors-Alarm"
@@ -155,7 +156,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   period              = 60
   statistic           = "Sum"
   threshold           = 1
-  alarm_description   = "Errores detectados en ${each.key}"
+  alarm_description   = "Errors detected in ${each.key}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
   tags                = local.common_tags
@@ -176,14 +177,14 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration_p95" {
     FunctionName = each.value
   }
 
-  alarm_description = "p95 de duración alto en ${each.value}"
+  alarm_description = "High p95 duration for ${each.value}"
   alarm_actions     = [aws_sns_topic.alerts.arn]
   ok_actions        = [aws_sns_topic.alerts.arn]
 
   tags = local.common_tags
 }
 
-# API Gateway - 5XX y Latency p95
+# API Gateway 5XX and p95 latency
 resource "aws_cloudwatch_metric_alarm" "apigw_5xx" {
   alarm_name          = "${var.project}-${var.environment}-APIGW-5XX-High"
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -202,7 +203,7 @@ resource "aws_cloudwatch_metric_alarm" "apigw_5xx" {
     Stage   = var.apigw_stage_name
   }
 
-  alarm_description = "Errores 5XX en API Gateway"
+  alarm_description = "API Gateway 5XX errors"
   alarm_actions     = [aws_sns_topic.alerts.arn]
   ok_actions        = [aws_sns_topic.alerts.arn]
 
@@ -227,7 +228,7 @@ resource "aws_cloudwatch_metric_alarm" "apigw_latency_p95" {
     Stage   = var.apigw_stage_name
   }
 
-  alarm_description = "Latencia p95 alta en API Gateway"
+  alarm_description = "High API Gateway p95 latency"
   alarm_actions     = [aws_sns_topic.alerts.arn]
   ok_actions        = [aws_sns_topic.alerts.arn]
 

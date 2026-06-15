@@ -24,6 +24,12 @@ variable "lambda_runtime" {
   default = "nodejs22.x"
 }
 
+variable "alarm_email" {
+  description = "Optional email address for SNS alarm notifications. Leave empty to skip the email subscription."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   type = map(string)
   default = {

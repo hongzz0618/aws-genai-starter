@@ -5,7 +5,7 @@
 .terraform/
 .terraform.lock.hcl
 
-# AWS credentials (¡Nunca subas esto!)
+# AWS credentials
 *.pem
 *.key
 *.crt

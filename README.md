@@ -17,7 +17,7 @@ A client sends a request to API Gateway, which invokes a Lambda function. The La
 - DynamoDB chat history storage
 - Amazon Bedrock Converse API invocation from Lambda
 - GitHub Actions checks with an OIDC trust example for future deployment workflows
-- CloudWatch logs, metrics, alarms, dashboard, SNS alerting, Budgets, and Cost Anomaly Detection examples
+- CloudWatch logs, metrics, alarms, dashboard, optional SNS alerting, Budgets, and Cost Anomaly Detection examples
 
 ## Project structure
 
@@ -33,6 +33,8 @@ A client sends a request to API Gateway, which invokes a Lambda function. The La
 
 Terraform currently deploys the Node.js Lambda with `handler = "handler.handler"` and packages the compiled `dist/` files. Do not treat `src/app.py` as the active Lambda implementation.
 
+The active TypeScript Lambda returns generic 500 responses for chat processing failures and logs internal error details for debugging.
+
 ## Terraform state
 
 The committed `live/dev` configuration defaults to local Terraform state so the project can be initialized safely on a new machine.
@@ -44,6 +46,12 @@ If you want S3 remote state, use only placeholder examples from `backend.hcl.exa
 The CI OIDC module only creates the GitHub trust relationship. It does not attach broad AWS managed permissions by default. Attach a project- and account-scoped deploy policy before using the role in a real workflow.
 
 The Lambda Bedrock policy uses configurable Bedrock resource ARNs instead of `Resource = "*"`. The module defaults cover Bedrock foundation-model and inference-profile ARN shapes, but production environments should pass exact regional model or inference-profile ARNs that match the configured `MODEL_ID`.
+
+## CI and observability notes
+
+GitHub Actions runs TypeScript typecheck, unit tests, TypeScript build, Lambda packaging, Terraform formatting, and Terraform validation. The workflow validates the repository but does not deploy AWS resources.
+
+The `live/dev` Terraform root wires observability inputs from the API, Lambda, and DynamoDB modules instead of hardcoded resource IDs or names. Alarm email notifications are optional; `alarm_email` defaults to an empty value and no email subscription is created unless a reviewer supplies one locally.
 
 ## Maturity note
 
@@ -60,8 +68,9 @@ This is a learning-oriented reference project for understanding API Gateway, Lam
 ## Demo limitations
 
 - The Lambda response helper currently sets `Access-Control-Allow-Origin: *`. That is acceptable for a demo API, but production deployments should restrict CORS to trusted origins.
+- The active TypeScript Lambda returns a generic error body for chat failures; detailed failure information is intended for logs.
 - `src/app.py` is retained only as legacy prototype code. It includes prototype-era behavior such as returning raw exception details and should not be deployed.
-- The observability module includes example names and notification settings. Replace those values before applying in a real AWS account.
+- The observability module includes account-level examples such as budgets, anomaly detection, alarms, and optional SNS notification wiring. Review these settings before applying them in an AWS account.
 
 ## Local validation
 

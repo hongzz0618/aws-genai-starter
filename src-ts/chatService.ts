@@ -108,11 +108,21 @@ export async function handleChat(
 
     return jsonResponse(200, responseBody);
   } catch (error) {
-    return jsonResponse(500, {
-      error: "Bedrock call failed",
-      detail: error instanceof Error ? error.message : String(error),
-    });
+    logChatError(error);
+    return jsonResponse(500, { error: "Chat request failed" });
   }
+}
+
+function logChatError(error: unknown): void {
+  const errorFields = error instanceof Error
+    ? { errorName: error.name, errorMessage: error.message }
+    : { errorName: "UnknownError", errorMessage: String(error) };
+
+  console.error(JSON.stringify({
+    level: "error",
+    message: "Chat request failed",
+    ...errorFields,
+  }));
 }
 
 function createTextMessage(role: "user" | "assistant", text: string): Message {
