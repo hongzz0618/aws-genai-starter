@@ -10,6 +10,28 @@ The project demonstrates a simple backend pattern for applications that need mod
 
 A client sends a request to API Gateway, which invokes a Lambda function. The Lambda calls the Amazon Bedrock Converse API, stores chat history in DynamoDB, and emits logs and metrics to CloudWatch. IAM modules define boundaries for Lambda access, Bedrock invocation, DynamoDB access, and optional GitHub OIDC trust.
 
+```text
+Client
+  -> API Gateway HTTP API
+  -> Lambda TypeScript handler
+  -> Amazon Bedrock Converse
+  -> Lambda response
+
+Lambda TypeScript handler
+  <-> DynamoDB chat history table
+
+CloudWatch
+  <- Lambda logs, API/Lambda/DynamoDB metrics, alarms, and dashboard examples
+```
+
+Runtime flow for `POST /chat`:
+
+1. Validate and parse the JSON request body.
+2. Load recent messages for the session from DynamoDB.
+3. Call the Bedrock Converse API with the prompt and available history.
+4. Store the new prompt/response turn in DynamoDB.
+5. Return the assistant response, usage metadata, stop reason, session ID, and timestamp.
+
 ## What's included
 
 - Serverless HTTP API with API Gateway v2 and Lambda
@@ -34,6 +56,69 @@ A client sends a request to API Gateway, which invokes a Lambda function. The La
 Terraform currently deploys the Node.js Lambda with `handler = "handler.handler"` and packages the compiled `dist/` files. Do not treat `src/app.py` as the active Lambda implementation.
 
 The active TypeScript Lambda returns generic 500 responses for chat processing failures and logs internal error details for debugging.
+
+## API examples
+
+Replace `<api-url>` with the `api_url` Terraform output for the deployed HTTP API.
+
+### `GET /health`
+
+```bash
+curl "<api-url>/health"
+```
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "service": "aws-genai-starter"
+}
+```
+
+### `POST /chat`
+
+```bash
+curl -X POST "<api-url>/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "demo-session",
+    "prompt": "Give a short greeting for a demo user."
+  }'
+```
+
+Example request body:
+
+```json
+{
+  "session_id": "demo-session",
+  "prompt": "Give a short greeting for a demo user."
+}
+```
+
+Example successful response shape:
+
+```json
+{
+  "session_id": "demo-session",
+  "timestamp": 1710000000000,
+  "response": "Example assistant response.",
+  "usage": {
+    "inputTokens": 12,
+    "outputTokens": 4,
+    "totalTokens": 16
+  },
+  "stopReason": "end_turn"
+}
+```
+
+Example generic error response shape:
+
+```json
+{
+  "error": "Chat request failed"
+}
+```
 
 ## Terraform state
 
