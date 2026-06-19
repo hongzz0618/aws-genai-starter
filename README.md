@@ -160,7 +160,7 @@ The Lambda Bedrock policy uses configurable Bedrock resource ARNs instead of `Re
 
 GitHub Actions runs TypeScript typecheck, unit tests, TypeScript build, Lambda packaging, Terraform formatting, and Terraform validation. The workflow validates the repository but does not deploy AWS resources.
 
-The `live/dev` Terraform root wires observability inputs from the API, Lambda, and DynamoDB modules instead of hardcoded resource IDs or names. Alarm email notifications are optional; `alarm_email` defaults to an empty value and no email subscription is created unless a reviewer supplies one locally.
+The `live/dev` Terraform root wires observability inputs from the API, Lambda, and DynamoDB modules instead of hardcoded resource IDs or names. CloudWatch alarms, AWS Budgets, and Cost Anomaly Detection publish notifications to the observability SNS topic, and the topic policy authorizes those AWS services to publish. Alarm email notifications are optional; `alarm_email` defaults to an empty value and no email subscription is created unless a reviewer supplies one locally. Email subscriptions require confirmation after deployment, and Terraform validation does not prove deployed notification delivery.
 
 ## Maturity note
 

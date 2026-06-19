@@ -11,6 +11,10 @@ locals {
   apigw_5xx_metric_name       = var.api_gw_type == "http_v2" ? "5xx" : "5XXError"
 }
 
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
+
 # -----------------------------
 # DynamoDB - Contributor Insights
 # -----------------------------
@@ -40,6 +44,86 @@ resource "aws_sns_topic" "alerts" {
   tags = local.common_tags
 }
 
+data "aws_iam_policy_document" "alerts_publish" {
+  statement {
+    sid     = "AllowCloudWatchAlarmPublishing"
+    effect  = "Allow"
+    actions = ["SNS:Publish"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+
+    resources = [aws_sns_topic.alerts.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values = [
+        "arn:${data.aws_partition.current.partition}:cloudwatch:${var.region}:${data.aws_caller_identity.current.account_id}:alarm:*"
+      ]
+    }
+  }
+
+  statement {
+    sid     = "AllowBudgetsPublishing"
+    effect  = "Allow"
+    actions = ["SNS:Publish"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["budgets.amazonaws.com"]
+    }
+
+    resources = [aws_sns_topic.alerts.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values = [
+        "arn:${data.aws_partition.current.partition}:budgets::${data.aws_caller_identity.current.account_id}:*"
+      ]
+    }
+  }
+
+  statement {
+    sid     = "AllowCostAnomalyDetectionPublishing"
+    effect  = "Allow"
+    actions = ["SNS:Publish"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["costalerts.amazonaws.com"]
+    }
+
+    resources = [aws_sns_topic.alerts.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "alerts_publish" {
+  arn    = aws_sns_topic.alerts.arn
+  policy = data.aws_iam_policy_document.alerts_publish.json
+}
+
 resource "aws_sns_topic_subscription" "email" {
   count     = var.alarm_email == "" ? 0 : 1
   topic_arn = aws_sns_topic.alerts.arn
@@ -62,6 +146,8 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
   tags                = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_duration_p95" {
@@ -84,6 +170,8 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration_p95" {
   ok_actions        = [aws_sns_topic.alerts.arn]
 
   tags = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
 }
 
 # API Gateway 5XX and p95 latency
@@ -110,6 +198,8 @@ resource "aws_cloudwatch_metric_alarm" "apigw_5xx" {
   ok_actions        = [aws_sns_topic.alerts.arn]
 
   tags = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
 }
 
 resource "aws_cloudwatch_metric_alarm" "apigw_latency_p95" {
@@ -135,6 +225,8 @@ resource "aws_cloudwatch_metric_alarm" "apigw_latency_p95" {
   ok_actions        = [aws_sns_topic.alerts.arn]
 
   tags = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
 }
 
 # DynamoDB - Throttle alarms
@@ -155,6 +247,8 @@ resource "aws_cloudwatch_metric_alarm" "ddb_read_throttle" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
   tags          = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
 }
 
 resource "aws_cloudwatch_metric_alarm" "ddb_write_throttle" {
@@ -174,6 +268,8 @@ resource "aws_cloudwatch_metric_alarm" "ddb_write_throttle" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
   tags          = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
 }
 
 # -----------------------------
@@ -280,6 +376,8 @@ resource "aws_budgets_budget" "monthly" {
   }
 
   tags = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
 }
 
 # Cost Anomaly Detection
@@ -306,4 +404,6 @@ resource "aws_ce_anomaly_subscription" "service_subscription" {
     type    = "SNS"
     address = aws_sns_topic.alerts.arn
   }
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
 }
