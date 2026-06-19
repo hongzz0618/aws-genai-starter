@@ -1,5 +1,26 @@
 import type { ChatRequestBody, HttpEvent } from "./types";
 
+export const INVALID_CHAT_REQUEST_ERROR = "Invalid chat request";
+
+export const CHAT_REQUEST_LIMITS = {
+  promptMaxLength: 8000,
+  historyTurnsMin: 0,
+  historyTurnsMax: 20,
+  maxTokensMin: 1,
+  maxTokensMax: 4096,
+  temperatureMin: 0,
+  temperatureMax: 1,
+  topPMin: 0,
+  topPMax: 1,
+} as const;
+
+export class InvalidChatRequestError extends Error {
+  constructor() {
+    super(INVALID_CHAT_REQUEST_ERROR);
+    this.name = "InvalidChatRequestError";
+  }
+}
+
 export function getHttpMethod(event: HttpEvent | null | undefined): string {
   return event?.requestContext?.http?.method ?? "GET";
 }
@@ -10,63 +31,82 @@ export function getRawPath(event: HttpEvent | null | undefined): string {
 
 export function parseJsonBody(event: HttpEvent): ChatRequestBody {
   const body = event.body || "{}";
-  const parsed: unknown = JSON.parse(body);
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new InvalidChatRequestError();
+  }
 
   if (!isRecord(parsed)) {
-    throw new Error("Request body must be a JSON object");
+    throw new InvalidChatRequestError();
   }
 
   return parsed;
 }
 
-export function stripOptionalString(value: unknown): string {
-  if (!value) {
-    return "";
-  }
-
+export function requiredTrimmedString(
+  value: unknown,
+  options: { maxLength?: number } = {},
+): string {
   if (typeof value !== "string") {
-    throw new TypeError("Value does not support strip");
+    throw new InvalidChatRequestError();
   }
 
-  return value.trim();
+  const trimmed = value.trim();
+  if (!trimmed || (options.maxLength !== undefined && trimmed.length > options.maxLength)) {
+    throw new InvalidChatRequestError();
+  }
+
+  return trimmed;
 }
 
-export function optionalString(value: unknown): string | undefined {
-  if (!value) {
+export function optionalTrimmedString(value: unknown): string | undefined {
+  if (value === undefined) {
     return undefined;
   }
 
   if (typeof value !== "string") {
-    throw new TypeError("Value must be a string");
+    throw new InvalidChatRequestError();
+  }
+
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+export function optionalIntegerInRange(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
+    throw new InvalidChatRequestError();
   }
 
   return value;
 }
 
-export function optionalInteger(value: unknown, fallback: number): number {
-  if (!value) {
+export function optionalNumberInRange(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (value === undefined) {
     return fallback;
   }
 
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Invalid integer value: ${String(value)}`);
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+    throw new InvalidChatRequestError();
   }
 
-  return Math.trunc(parsed);
-}
-
-export function optionalNumber(value: unknown, fallback: number): number {
-  if (!value) {
-    return fallback;
-  }
-
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Invalid numeric value: ${String(value)}`);
-  }
-
-  return parsed;
+  return value;
 }
 
 function isRecord(value: unknown): value is ChatRequestBody {

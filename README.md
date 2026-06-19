@@ -55,7 +55,7 @@ Runtime flow for `POST /chat`:
 
 Terraform currently deploys the Node.js Lambda with `handler = "handler.handler"` and packages the compiled `dist/` files. Do not treat `src/app.py` as the active Lambda implementation.
 
-The active TypeScript Lambda returns generic 500 responses for chat processing failures and logs internal error details for debugging.
+The active TypeScript Lambda returns generic public error responses for chat processing failures and logs safe internal error metadata for debugging.
 
 ## API examples
 
@@ -96,6 +96,18 @@ Example request body:
 }
 ```
 
+Accepted request fields:
+
+- `prompt`: required string, 1 to 8000 trimmed characters.
+- `session_id`: optional string. If omitted or blank, the Lambda generates one.
+- `system_prompt`: optional string.
+- `history_turns`: optional integer from 0 to 20. Defaults to the Lambda configuration.
+- `max_tokens`: optional integer from 1 to 4096. Defaults to the Lambda configuration.
+- `temperature`: optional number from 0 to 1. Defaults to the Lambda configuration.
+- `top_p`: optional number from 0 to 1. Defaults to the Lambda configuration.
+
+Clients cannot select the Bedrock model in the request body. The Lambda uses the configured `MODEL_ID`, which should match the Bedrock IAM resource ARNs configured in Terraform.
+
 Example successful response shape:
 
 ```json
@@ -119,6 +131,18 @@ Example generic error response shape:
   "error": "Chat request failed"
 }
 ```
+
+Malformed JSON, non-object request bodies, blank or oversized prompts, invalid field types, invalid numeric ranges, and request-level `model_id` values return:
+
+```json
+{
+  "error": "Invalid chat request"
+}
+```
+
+Bedrock throttling or temporary service availability errors return HTTP `503` with a generic body. Bedrock access errors, persistence failures, and unexpected internal failures return HTTP `500` with a generic body. AWS request IDs, raw SDK messages, table names, stack traces, prompts, and complete request bodies are not returned to clients. Logs include safe metadata such as failure category, error name, and SDK HTTP status when available.
+
+A successful `POST /chat` response is returned only after the prompt and model response have been stored in DynamoDB.
 
 ## Terraform state
 
@@ -153,7 +177,7 @@ This is a learning-oriented reference project for understanding API Gateway, Lam
 ## Demo limitations
 
 - The Lambda response helper currently sets `Access-Control-Allow-Origin: *`. That is acceptable for a demo API, but production deployments should restrict CORS to trusted origins.
-- The active TypeScript Lambda returns a generic error body for chat failures; detailed failure information is intended for logs.
+- The active TypeScript Lambda returns generic public error bodies for chat failures; detailed failure metadata is intended for logs.
 - `src/app.py` is retained only as legacy prototype code. It includes prototype-era behavior such as returning raw exception details and should not be deployed.
 - The observability module includes account-level examples such as budgets, anomaly detection, alarms, and optional SNS notification wiring. Review these settings before applying them in an AWS account.
 

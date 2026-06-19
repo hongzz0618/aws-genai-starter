@@ -18,11 +18,14 @@ import {
 import { jsonResponse } from "./response";
 import type { ChatSuccessResponseBody, ChatTurnItem, HttpEvent, LambdaResponse } from "./types";
 import {
-  optionalInteger,
-  optionalNumber,
-  optionalString,
+  CHAT_REQUEST_LIMITS,
+  INVALID_CHAT_REQUEST_ERROR,
+  InvalidChatRequestError,
+  optionalIntegerInRange,
+  optionalNumberInRange,
   parseJsonBody,
-  stripOptionalString,
+  optionalTrimmedString,
+  requiredTrimmedString,
 } from "./validation";
 
 export interface ChatDependencies {
@@ -37,29 +40,51 @@ export async function handleChat(
   event: HttpEvent,
   dependencies: ChatDependencies = {},
 ): Promise<LambdaResponse> {
-  const config = dependencies.config ?? loadConfig();
-
-  if (!config.chatTable) {
-    return jsonResponse(500, { error: "CHAT_TABLE not configured" });
-  }
-
   try {
-    const payload = parseJsonBody(event);
-    const sessionId =
-      optionalString(payload.session_id) ??
-      (dependencies.generateSessionId ?? randomUUID)();
-    const prompt = stripOptionalString(payload.prompt);
+    const config = dependencies.config ?? loadConfig();
 
-    if (!prompt) {
-      return jsonResponse(400, { error: "Missing 'prompt'" });
+    if (!config.chatTable) {
+      throw new ChatServiceError("ConfigurationError");
     }
 
-    const systemPrompt = stripOptionalString(payload.system_prompt);
-    const modelId = optionalString(payload.model_id) ?? config.modelId;
-    const historyTurns = optionalInteger(payload.history_turns, config.historyTurns);
-    const maxTokens = optionalInteger(payload.max_tokens, config.maxTokens);
-    const temperature = optionalNumber(payload.temperature, config.temperature);
-    const topP = optionalNumber(payload.top_p, config.topP);
+    const payload = parseJsonBody(event);
+    const sessionId =
+      optionalTrimmedString(payload.session_id) ??
+      (dependencies.generateSessionId ?? randomUUID)();
+    const prompt = requiredTrimmedString(payload.prompt, {
+      maxLength: CHAT_REQUEST_LIMITS.promptMaxLength,
+    });
+
+    if (Object.prototype.hasOwnProperty.call(payload, "model_id")) {
+      throw new InvalidChatRequestError();
+    }
+
+    const systemPrompt = optionalTrimmedString(payload.system_prompt);
+    const modelId = config.modelId;
+    const historyTurns = optionalIntegerInRange(
+      payload.history_turns,
+      config.historyTurns,
+      CHAT_REQUEST_LIMITS.historyTurnsMin,
+      CHAT_REQUEST_LIMITS.historyTurnsMax,
+    );
+    const maxTokens = optionalIntegerInRange(
+      payload.max_tokens,
+      config.maxTokens,
+      CHAT_REQUEST_LIMITS.maxTokensMin,
+      CHAT_REQUEST_LIMITS.maxTokensMax,
+    );
+    const temperature = optionalNumberInRange(
+      payload.temperature,
+      config.temperature,
+      CHAT_REQUEST_LIMITS.temperatureMin,
+      CHAT_REQUEST_LIMITS.temperatureMax,
+    );
+    const topP = optionalNumberInRange(
+      payload.top_p,
+      config.topP,
+      CHAT_REQUEST_LIMITS.topPMin,
+      CHAT_REQUEST_LIMITS.topPMax,
+    );
 
     const repository =
       dependencies.repository ??
@@ -108,20 +133,111 @@ export async function handleChat(
 
     return jsonResponse(200, responseBody);
   } catch (error) {
-    logChatError(error);
-    return jsonResponse(500, { error: "Chat request failed" });
+    const failure = classifyChatFailure(error);
+    if (failure.category !== "invalid_request") {
+      logChatError(error, failure.category);
+    }
+    return jsonResponse(failure.statusCode, { error: failure.publicError });
   }
 }
 
-function logChatError(error: unknown): void {
+class ChatServiceError extends Error {
+  constructor(name: string) {
+    super(name);
+    this.name = name;
+  }
+}
+
+interface ChatFailure {
+  statusCode: number;
+  publicError: string;
+  category: string;
+}
+
+function classifyChatFailure(error: unknown): ChatFailure {
+  const errorName = getErrorName(error);
+
+  if (error instanceof InvalidChatRequestError) {
+    return {
+      statusCode: 400,
+      publicError: INVALID_CHAT_REQUEST_ERROR,
+      category: "invalid_request",
+    };
+  }
+
+  if (isBedrockThrottlingError(errorName)) {
+    return {
+      statusCode: 503,
+      publicError: "Chat service temporarily unavailable",
+      category: "bedrock_retryable",
+    };
+  }
+
+  if (isBedrockAccessDeniedError(errorName)) {
+    return {
+      statusCode: 500,
+      publicError: "Chat request failed",
+      category: "bedrock_access_denied",
+    };
+  }
+
+  if (isBedrockValidationError(errorName)) {
+    return {
+      statusCode: 502,
+      publicError: "Chat request failed",
+      category: "bedrock_validation",
+    };
+  }
+
+  return {
+    statusCode: 500,
+    publicError: "Chat request failed",
+    category: "internal",
+  };
+}
+
+function isBedrockThrottlingError(errorName: string): boolean {
+  return [
+    "ThrottlingException",
+    "TooManyRequestsException",
+    "ServiceUnavailableException",
+    "ModelNotReadyException",
+  ].includes(errorName);
+}
+
+function isBedrockAccessDeniedError(errorName: string): boolean {
+  return ["AccessDeniedException", "UnauthorizedOperation"].includes(errorName);
+}
+
+function isBedrockValidationError(errorName: string): boolean {
+  return ["ValidationException"].includes(errorName);
+}
+
+function getErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : "UnknownError";
+}
+
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null || !("$metadata" in error)) {
+    return undefined;
+  }
+
+  const metadata = (error as { $metadata?: { httpStatusCode?: unknown } }).$metadata;
+  return typeof metadata?.httpStatusCode === "number" ? metadata.httpStatusCode : undefined;
+}
+
+function logChatError(error: unknown, category: string): void {
   const errorFields = error instanceof Error
-    ? { errorName: error.name, errorMessage: error.message }
-    : { errorName: "UnknownError", errorMessage: String(error) };
+    ? { errorName: error.name }
+    : { errorName: "UnknownError" };
+  const httpStatusCode = getErrorStatusCode(error);
 
   console.error(JSON.stringify({
     level: "error",
     message: "Chat request failed",
+    category,
     ...errorFields,
+    ...(httpStatusCode === undefined ? {} : { httpStatusCode }),
   }));
 }
 
