@@ -2,6 +2,13 @@ resource "aws_apigatewayv2_api" "this" {
   name          = var.name
   protocol_type = "HTTP"
   tags          = var.tags
+
+  cors_configuration {
+    allow_headers = var.cors_allow_headers
+    allow_methods = var.cors_allow_methods
+    allow_origins = var.cors_allow_origins
+    max_age       = var.cors_max_age
+  }
 }
 
 resource "aws_apigatewayv2_integration" "lambda" {

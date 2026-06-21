@@ -176,7 +176,7 @@ This is a learning-oriented reference project for understanding API Gateway, Lam
 
 ## Demo limitations
 
-- The Lambda response helper currently sets `Access-Control-Allow-Origin: *`. That is acceptable for a demo API, but production deployments should restrict CORS to trusted origins.
+- API Gateway HTTP API native CORS is configured for the reference environment with allowed origin `*`, methods `GET`, `POST`, and `OPTIONS`, and header `Content-Type`. Lambda responses only set `Content-Type`; browser preflight behavior requires a deployed HTTP API check.
 - The active TypeScript Lambda returns generic public error bodies for chat failures; detailed failure metadata is intended for logs.
 - `src/app.py` is retained only as legacy prototype code. It includes prototype-era behavior such as returning raw exception details and should not be deployed.
 - The observability module includes account-level examples such as budgets, anomaly detection, alarms, and optional SNS notification wiring. Review these settings before applying them in an AWS account.

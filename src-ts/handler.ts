@@ -22,10 +22,6 @@ export function createHandler(dependencies: ChatDependencies = {}) {
       return handleChat(event, dependencies);
     }
 
-    if (method === "OPTIONS") {
-      return jsonResponse(200);
-    }
-
     return jsonResponse(404, { error: "Not Found" });
   };
 }

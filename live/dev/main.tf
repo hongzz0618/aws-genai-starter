@@ -68,10 +68,13 @@ module "lambda_api" {
 
 # 5) API Gateway HTTP v2 routes for /health and /chat
 module "api_http" {
-  source      = "../../modules/api_http"
-  name        = "${local.name_prefix}-http"
-  lambda_arn  = module.lambda_api.lambda_invoke_arn
-  lambda_name = module.lambda_api.function_name
+  source             = "../../modules/api_http"
+  name               = "${local.name_prefix}-http"
+  lambda_arn         = module.lambda_api.lambda_invoke_arn
+  lambda_name        = module.lambda_api.function_name
+  cors_allow_origins = ["*"]
+  cors_allow_methods = ["GET", "POST", "OPTIONS"]
+  cors_allow_headers = ["Content-Type"]
   routes = {
     "GET /health" = "default"
     "POST /chat"  = "default"

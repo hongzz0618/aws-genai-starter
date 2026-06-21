@@ -175,21 +175,6 @@ describe("handler", () => {
     expect(JSON.parse(response.body)).toEqual({ error: "Chat request failed" });
   });
 
-  it("returns 200 for OPTIONS with CORS headers", async () => {
-    const response = await createHandler()({
-      rawPath: "/chat",
-      requestContext: { http: { method: "OPTIONS" } },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual({});
-    expect(response.headers).toMatchObject({
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    });
-  });
-
   it("handles POST /chat success with mocked Bedrock and DynamoDB", async () => {
     const savedItems: ChatTurnItem[] = [];
     const repository: ChatRepository = {
