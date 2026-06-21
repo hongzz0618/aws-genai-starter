@@ -29,7 +29,7 @@ resource "aws_cloudwatch_log_metric_filter" "lambda_error_filter" {
   for_each       = var.lambda_log_group_names
   name           = "LambdaErrorFilter-${each.key}"
   log_group_name = each.value
-  pattern        = "?ERROR ?Error ?Exception ?Traceback"
+  pattern        = "{ $.level = \"error\" && $.event = \"chat_request_failed\" }"
 
   metric_transformation {
     name      = "LambdaErrorCount_${each.key}"

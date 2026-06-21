@@ -140,7 +140,7 @@ Malformed JSON, non-object request bodies, blank or oversized prompts, invalid f
 }
 ```
 
-Bedrock throttling or temporary service availability errors return HTTP `503` with a generic body. Bedrock access errors, persistence failures, and unexpected internal failures return HTTP `500` with a generic body. AWS request IDs, raw SDK messages, table names, stack traces, prompts, and complete request bodies are not returned to clients. Logs include safe metadata such as failure category, error name, and SDK HTTP status when available.
+Bedrock throttling or temporary service availability errors return HTTP `503` with a generic body. Bedrock access errors, persistence failures, and unexpected internal failures return HTTP `500` with a generic body. AWS request IDs, raw SDK messages, table names, stack traces, prompts, and complete request bodies are not returned to clients. Logs include the stable `chat_request_failed` event plus safe metadata such as failure category, error name, and SDK HTTP status when available.
 
 A successful `POST /chat` response is returned only after the prompt and model response have been stored in DynamoDB.
 
@@ -160,7 +160,7 @@ The Lambda Bedrock policy uses configurable Bedrock resource ARNs instead of `Re
 
 GitHub Actions runs TypeScript typecheck, unit tests, TypeScript build, Lambda packaging, Terraform formatting, and Terraform validation. The workflow validates the repository but does not deploy AWS resources.
 
-The `live/dev` Terraform root wires observability inputs from the API, Lambda, and DynamoDB modules instead of hardcoded resource IDs or names. CloudWatch alarms, AWS Budgets, and Cost Anomaly Detection publish notifications to the observability SNS topic, and the topic policy authorizes those AWS services to publish. Alarm email notifications are optional; `alarm_email` defaults to an empty value and no email subscription is created unless a reviewer supplies one locally. Email subscriptions require confirmation after deployment, and Terraform validation does not prove deployed notification delivery.
+The `live/dev` Terraform root wires observability inputs from the API, Lambda, and DynamoDB modules instead of hardcoded resource IDs or names. The Lambda custom error metric filter matches structured `chat_request_failed` log events and does not count invalid chat request validation failures. CloudWatch alarms, AWS Budgets, and Cost Anomaly Detection publish notifications to the observability SNS topic, and the topic policy authorizes those AWS services to publish. Alarm email notifications are optional; `alarm_email` defaults to an empty value and no email subscription is created unless a reviewer supplies one locally. Email subscriptions require confirmation after deployment, and Terraform validation does not prove deployed notification delivery.
 
 ## Maturity note
 

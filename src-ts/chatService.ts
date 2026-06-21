@@ -234,6 +234,7 @@ function logChatError(error: unknown, category: string): void {
 
   console.error(JSON.stringify({
     level: "error",
+    event: "chat_request_failed",
     message: "Chat request failed",
     category,
     ...errorFields,

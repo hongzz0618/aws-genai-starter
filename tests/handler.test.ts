@@ -80,6 +80,15 @@ describe("handler", () => {
     expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
   });
 
+  it("does not log chat failure metrics for invalid chat requests", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await createHandler({ config: baseConfig })(chatEvent({ prompt: "   " }));
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it("returns 400 for POST /chat with a blank prompt", async () => {
     const response = await createHandler({ config: baseConfig })(chatEvent({ prompt: "   " }));
 
@@ -362,6 +371,8 @@ describe("handler", () => {
     expect(consoleError).toHaveBeenCalledOnce();
     const logEntry = JSON.parse(String(consoleError.mock.calls[0]?.[0]));
     expect(logEntry).toMatchObject({
+      level: "error",
+      event: "chat_request_failed",
       category: "bedrock_retryable",
       errorName: "ThrottlingException",
       httpStatusCode: 429,
