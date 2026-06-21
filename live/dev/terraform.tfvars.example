@@ -1,0 +1,8 @@
+# Optional local overrides for the dev root.
+# Keep MODEL_ID and Bedrock IAM resources aligned:
+# - bedrock_model_id is passed to the Lambda MODEL_ID environment variable.
+# - bedrock_foundation_model_id and destination regions build the allowed foundation-model ARNs.
+#
+# bedrock_model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+# bedrock_foundation_model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+# bedrock_inference_profile_destination_regions = ["us-east-1", "us-east-2", "us-west-2"]

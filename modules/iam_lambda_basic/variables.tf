@@ -10,16 +10,30 @@ variable "enable_bedrock" {
   default = false
 }
 
-variable "bedrock_model_resource_arns" {
-  type = list(string)
-  default = [
-    "arn:aws:bedrock:*::foundation-model/*",
-    "arn:aws:bedrock:*:*:inference-profile/*"
-  ]
-  description = "Bedrock model or inference-profile ARNs the Lambda may invoke. Replace the defaults with exact regional model ARNs for production."
+variable "bedrock_inference_profile_arns" {
+  type        = list(string)
+  default     = []
+  description = "Exact Bedrock inference-profile or application-inference-profile ARNs the Lambda may invoke."
 
   validation {
-    condition     = length(var.bedrock_model_resource_arns) > 0
-    error_message = "bedrock_model_resource_arns must include at least one Bedrock model or inference-profile ARN."
+    condition = alltrue([
+      for arn in var.bedrock_inference_profile_arns :
+      can(regex("^arn:[^:]+:bedrock:[^:*]+:[0-9]{12}:(inference-profile|application-inference-profile)/[^*]+$", arn))
+    ])
+    error_message = "bedrock_inference_profile_arns must contain exact Bedrock inference-profile or application-inference-profile ARNs without wildcards."
+  }
+}
+
+variable "bedrock_foundation_model_arns" {
+  type        = list(string)
+  default     = []
+  description = "Exact Bedrock foundation-model ARNs the Lambda may invoke directly or through the configured inference profile."
+
+  validation {
+    condition = alltrue([
+      for arn in var.bedrock_foundation_model_arns :
+      can(regex("^arn:[^:]+:bedrock:[^:*]*::foundation-model/[^*]+$", arn))
+    ])
+    error_message = "bedrock_foundation_model_arns must contain exact Bedrock foundation-model ARNs without wildcards."
   }
 }

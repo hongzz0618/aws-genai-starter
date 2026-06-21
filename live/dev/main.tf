@@ -2,14 +2,27 @@ locals {
   name_prefix = "${var.project}-${var.env}"
   chat_table  = "chat_history-${var.env}"
   lambda_fn   = "api-${var.env}"
+
+  bedrock_model_id              = var.bedrock_model_id
+  bedrock_inference_profile_arn = "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${local.bedrock_model_id}"
+  bedrock_foundation_model_arns = [
+    for region in var.bedrock_inference_profile_destination_regions :
+    "arn:${data.aws_partition.current.partition}:bedrock:${region}::foundation-model/${var.bedrock_foundation_model_id}"
+  ]
 }
+
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
 
 # 1) IAM role for Lambda
 module "iam_lambda" {
-  source         = "../../modules/iam_lambda_basic"
-  name           = "${local.name_prefix}-lambda"
-  enable_bedrock = true
-  tags           = var.tags
+  source                         = "../../modules/iam_lambda_basic"
+  name                           = "${local.name_prefix}-lambda"
+  enable_bedrock                 = true
+  bedrock_inference_profile_arns = [local.bedrock_inference_profile_arn]
+  bedrock_foundation_model_arns  = local.bedrock_foundation_model_arns
+  tags                           = var.tags
 }
 
 # 2) DynamoDB chat history table
@@ -58,7 +71,7 @@ module "lambda_api" {
   log_retention_days = 14
   environment = {
     CHAT_TABLE    = module.chat_table.table_name
-    MODEL_ID      = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    MODEL_ID      = local.bedrock_model_id
     HISTORY_TURNS = "10"
     TEMPERATURE   = "0.2"
     MAX_TOKENS    = "1024"

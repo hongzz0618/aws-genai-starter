@@ -154,7 +154,11 @@ If you want S3 remote state, use only placeholder examples from `backend.hcl.exa
 
 The CI OIDC module only creates the GitHub trust relationship. It does not attach broad AWS managed permissions by default. Attach a project- and account-scoped deploy policy before using the role in a real workflow.
 
-The Lambda Bedrock policy uses configurable Bedrock resource ARNs instead of `Resource = "*"`. The module defaults cover Bedrock foundation-model and inference-profile ARN shapes, but production environments should pass exact regional model or inference-profile ARNs that match the configured `MODEL_ID`.
+The Lambda Bedrock policy grants only `bedrock:InvokeModel`, which is the permission required by the current non-streaming Converse API path. It does not grant `bedrock:InvokeModelWithResponseStream`.
+
+The dev root sets `MODEL_ID` from `bedrock_model_id` and passes exact Bedrock ARNs to the IAM module. The committed example uses the system-defined inference profile ID `us.anthropic.claude-3-5-sonnet-20241022-v2:0`, an account-scoped inference-profile ARN built from the current caller identity, and exact foundation-model ARNs for the configured destination Regions. The foundation-model statement is conditioned with `bedrock:InferenceProfileArn`, so those model ARNs are allowed only through the configured inference profile.
+
+Foundation models, system-defined inference profiles, and application inference profiles use different ARN shapes. When changing models, update `bedrock_model_id`, `bedrock_foundation_model_id`, and `bedrock_inference_profile_destination_regions` together, using the model detail page or `GetInferenceProfile` output to confirm the destination model ARNs. The module rejects empty lists, `*`, broad wildcard ARNs, and non-Bedrock ARNs during Terraform validation or planning. Local validation proves syntax and wiring; a deployed Bedrock call is still required to prove live account access and model entitlement.
 
 ## CI and observability notes
 
