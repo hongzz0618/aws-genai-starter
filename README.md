@@ -168,6 +168,8 @@ Terraform also defines selected alarms for Lambda errors, Lambda throttles, API 
 
 ## Terraform
 
+Terraform `>= 1.7.0` is required for the native plan tests.
+
 The `live/dev` root defines:
 
 - Cognito User Pool and app client without a client secret
@@ -179,8 +181,9 @@ The `live/dev` root defines:
 - Scoped Lambda IAM for DynamoDB `PutItem` and `Query`
 - Exact Bedrock IAM resource examples without wildcard Bedrock resources
 - CloudWatch logs, metrics, selected alarms, dashboard, and cost alert examples
+- Native Terraform plan tests for Cognito, API Gateway, DynamoDB, IAM, log retention, and observability contracts
 
-The configuration validates locally without deploying resources. Do not run `terraform apply` unless you intentionally want to create AWS resources.
+The configuration validates and tests locally without deploying resources. Do not run `terraform apply` unless you intentionally want to create AWS resources.
 
 ## Local Validation
 
@@ -199,9 +202,10 @@ terraform fmt -check -recursive
 cd live/dev
 terraform init -backend=false -input=false
 terraform validate -no-color
+terraform test -no-color
 ```
 
-CI runs these checks without AWS deployment.
+CI runs these checks without AWS credentials or deployment.
 
 ## Project Structure
 
@@ -210,9 +214,10 @@ CI runs these checks without AWS deployment.
 - `openapi/openapi.yaml`: documented API contract
 - `modules/`: reusable Terraform modules
 - `live/dev/`: local-validating dev Terraform root
+- `live/dev/tests/plan_contracts.tftest.hcl`: native Terraform plan contract tests
 - `scripts/package_lambda.sh`: Lambda artifact packaging
 - `scripts/verify_lambda_artifact.sh`: Lambda artifact sanity checks
-- `.github/workflows/ci.yml`: local-style CI checks
+- `.github/workflows/ci.yml`: application, artifact, contract, and Terraform checks
 
 ## Boundaries and Limitations
 
