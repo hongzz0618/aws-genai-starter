@@ -8,14 +8,29 @@ import { CHAT_REQUEST_LIMITS } from "../src-ts/validation";
 const baseConfig = {
   chatTable: "chat-table",
   awsRegion: "us-east-1",
+  environment: "test",
   modelId: "test-model",
   historyTurns: 10,
+  maxContextChars: 24000,
+  retentionDays: 7,
   maxTokens: 1024,
   temperature: 0.2,
   topP: 1,
 };
 
-function chatEvent(body: string | object): HttpEvent {
+function chatEvent(body: string | object, sub = "user-a"): HttpEvent {
+  return {
+    rawPath: "/chat",
+    body: typeof body === "string" ? body : JSON.stringify(body),
+    requestContext: {
+      http: { method: "POST" },
+      requestId: "request-1",
+      authorizer: { jwt: { claims: { sub } } },
+    },
+  };
+}
+
+function unauthenticatedChatEvent(body: string | object): HttpEvent {
   return {
     rawPath: "/chat",
     body: typeof body === "string" ? body : JSON.stringify(body),
@@ -33,11 +48,20 @@ function namedAwsError(name: string, message: string, httpStatusCode?: number): 
 }
 
 function createMockRepository(history: ConverseCommandInput["messages"] = []): ChatRepository & {
-  queryHistoryMessages: ReturnType<typeof vi.fn>;
+  queryHistoryTurns: ReturnType<typeof vi.fn>;
   saveTurn: ReturnType<typeof vi.fn>;
 } {
+  const turns = [];
+  for (let index = 0; index < history.length; index += 2) {
+    const prompt = history[index]?.content?.[0]?.text;
+    const response = history[index + 1]?.content?.[0]?.text;
+    if (typeof prompt === "string" && typeof response === "string") {
+      turns.push({ prompt, response });
+    }
+  }
+
   return {
-    queryHistoryMessages: vi.fn(async () => history),
+    queryHistoryTurns: vi.fn(async () => turns),
     saveTurn: vi.fn(async () => undefined),
   };
 }
@@ -70,7 +94,7 @@ async function expectInvalidBeforeDownstream(body: object): Promise<void> {
   expect(response.statusCode).toBe(400);
   expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
   expect(response.body).not.toContain(String(Object.values(body)[0]));
-  expect(repository.queryHistoryMessages).not.toHaveBeenCalled();
+  expect(repository.queryHistoryTurns).not.toHaveBeenCalled();
   expect(repository.saveTurn).not.toHaveBeenCalled();
   expect(bedrockClient.converse).not.toHaveBeenCalled();
   expect(consoleError).not.toHaveBeenCalled();
@@ -94,6 +118,15 @@ describe("handler", () => {
     });
   });
 
+  it("does not require authentication for GET /health", async () => {
+    const response = await createHandler()({
+      rawPath: "/health",
+      requestContext: { http: { method: "GET" } },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
   it("returns 404 for unknown routes", async () => {
     const response = await createHandler()({
       rawPath: "/unknown",
@@ -102,6 +135,28 @@ describe("handler", () => {
 
     expect(response.statusCode).toBe(404);
     expect(JSON.parse(response.body)).toEqual({ error: "Not Found" });
+  });
+
+  it("returns 401 for POST /chat when JWT identity is missing", async () => {
+    const response = await createHandler({ config: baseConfig })(
+      unauthenticatedChatEvent({ prompt: "hello" }),
+    );
+
+    expect(response.statusCode).toBe(401);
+    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" });
+  });
+
+  it("returns 401 for POST /chat when JWT sub claim is malformed", async () => {
+    const event = chatEvent({ prompt: "hello" });
+    event.requestContext = {
+      http: { method: "POST" },
+      authorizer: { jwt: { claims: { sub: 123 } } },
+    };
+
+    const response = await createHandler({ config: baseConfig })(event);
+
+    expect(response.statusCode).toBe(401);
+    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" });
   });
 
   it("returns 400 for POST /chat with malformed JSON", async () => {
@@ -116,6 +171,24 @@ describe("handler", () => {
 
     expect(response.statusCode).toBe(400);
     expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
+  });
+
+  it("rejects client-supplied user_id in the request body", async () => {
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+    })(chatEvent({
+      prompt: "hello",
+      user_id: "attacker-user",
+    }));
+
+    expect(response.statusCode).toBe(400);
+    expect(repository.queryHistoryTurns).not.toHaveBeenCalled();
+    expect(bedrockClient.converse).not.toHaveBeenCalled();
   });
 
   it("returns 400 for POST /chat with a missing prompt", async () => {
@@ -167,7 +240,7 @@ describe("handler", () => {
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body).session_id).toBe(sessionId);
-    expect(repository.queryHistoryMessages).toHaveBeenCalledWith(sessionId, baseConfig.historyTurns);
+    expect(repository.queryHistoryTurns).toHaveBeenCalledWith("user-a", sessionId, baseConfig.historyTurns);
     expect(repository.saveTurn).toHaveBeenCalledWith(expect.objectContaining({
       session_id: sessionId,
     }));
@@ -190,7 +263,7 @@ describe("handler", () => {
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body).session_id).toBe(sessionId);
-    expect(repository.queryHistoryMessages).toHaveBeenCalledWith(sessionId, baseConfig.historyTurns);
+    expect(repository.queryHistoryTurns).toHaveBeenCalledWith("user-a", sessionId, baseConfig.historyTurns);
   });
 
   it("rejects oversized session_id before DynamoDB or Bedrock calls", async () => {
@@ -267,7 +340,8 @@ describe("handler", () => {
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body).session_id).toBe("generated-session");
-    expect(repository.queryHistoryMessages).toHaveBeenCalledWith(
+    expect(repository.queryHistoryTurns).toHaveBeenCalledWith(
+      "user-a",
       "generated-session",
       baseConfig.historyTurns,
     );
@@ -391,10 +465,9 @@ describe("handler", () => {
   it("handles POST /chat success with mocked Bedrock and DynamoDB", async () => {
     const savedItems: ChatTurnItem[] = [];
     const repository: ChatRepository = {
-      async queryHistoryMessages() {
+      async queryHistoryTurns() {
         return [
-          { role: "user", content: [{ text: "previous prompt" }] },
-          { role: "assistant", content: [{ text: "previous response" }] },
+          { prompt: "previous prompt", response: "previous response" },
         ];
       },
       async saveTurn(item) {
@@ -422,19 +495,15 @@ describe("handler", () => {
         };
       },
     };
-    const event: HttpEvent = {
-      rawPath: "/chat",
-      body: JSON.stringify({
-        prompt: "hello",
-        session_id: "session-1",
-        system_prompt: "be brief",
-        history_turns: 2,
-        max_tokens: 99,
-        temperature: 0.3,
-        top_p: 0.9,
-      }),
-      requestContext: { http: { method: "POST" } },
-    };
+    const event = chatEvent({
+      prompt: "hello",
+      session_id: "session-1",
+      system_prompt: "be brief",
+      history_turns: 2,
+      max_tokens: 99,
+      temperature: 0.3,
+      top_p: 0.9,
+    });
 
     const response = await createHandler({
       config: baseConfig,
@@ -442,6 +511,7 @@ describe("handler", () => {
       bedrockClient,
       nowMs: () => 1710000000000,
       generateSessionId: () => "generated-session",
+      generateTurnId: () => "turn-1",
     })(event);
 
     expect(response.statusCode).toBe(200);
@@ -473,11 +543,14 @@ describe("handler", () => {
     ]);
     expect(savedItems).toEqual([
       {
+        user_id: "user-a",
         session_id: "session-1",
+        sk: "SESSION#c2Vzc2lvbi0x#1710000000000#turn-1",
         timestamp: 1710000000000,
         prompt: "hello",
         response: "mock response",
         model_id: "test-model",
+        expires_at: 1710604800,
         input_tokens: 12,
         output_tokens: 4,
       },
@@ -487,7 +560,7 @@ describe("handler", () => {
   it("accepts documented parameter boundaries", async () => {
     const historyLimits: number[] = [];
     const repository: ChatRepository = {
-      async queryHistoryMessages(_sessionId, limit) {
+      async queryHistoryTurns(_userId, _sessionId, limit) {
         historyLimits.push(limit);
         return [];
       },
@@ -552,7 +625,7 @@ describe("handler", () => {
   it("returns 503 without raw AWS details when Bedrock is throttled", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const repository: ChatRepository = {
-      async queryHistoryMessages() {
+      async queryHistoryTurns() {
         return [];
       },
       async saveTurn() {
@@ -581,7 +654,7 @@ describe("handler", () => {
     expect(logEntry).toMatchObject({
       level: "error",
       event: "chat_request_failed",
-      category: "bedrock_retryable",
+      failureCategory: "bedrock_retryable",
       errorName: "ThrottlingException",
       httpStatusCode: 429,
     });
@@ -591,7 +664,7 @@ describe("handler", () => {
   it("returns a generic error when Bedrock access is denied", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const repository: ChatRepository = {
-      async queryHistoryMessages() {
+      async queryHistoryTurns() {
         return [];
       },
       async saveTurn() {
@@ -620,7 +693,7 @@ describe("handler", () => {
   it("returns a generic upstream error when Bedrock rejects the service request", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const repository: ChatRepository = {
-      async queryHistoryMessages() {
+      async queryHistoryTurns() {
         return [];
       },
       async saveTurn() {
@@ -648,7 +721,7 @@ describe("handler", () => {
   it("returns a generic error when persistence fails after Bedrock succeeds", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const repository: ChatRepository = {
-      async queryHistoryMessages() {
+      async queryHistoryTurns() {
         return [];
       },
       async saveTurn() {
@@ -679,5 +752,129 @@ describe("handler", () => {
     expect(JSON.parse(response.body)).toEqual({ error: "Chat request failed" });
     expect(response.body).not.toContain("DynamoDB table detail");
     expect(consoleError).toHaveBeenCalledOnce();
+  });
+
+  it("does not save an empty Bedrock text response as a successful turn", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient("   ");
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+    })(chatEvent({ prompt: "hello" }));
+
+    expect(response.statusCode).toBe(502);
+    expect(JSON.parse(response.body)).toEqual({ error: "Chat request failed" });
+    expect(repository.saveTurn).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledOnce();
+  });
+
+  it("does not save Bedrock responses that contain only non-text content blocks", async () => {
+    const repository = createMockRepository();
+    const bedrockClient = {
+      converse: vi.fn(async (): Promise<ConverseCommandOutput> => ({
+        output: {
+          message: {
+            role: "assistant",
+            content: [{ json: { value: "not text" } }],
+          },
+        },
+        $metadata: {},
+      })),
+    };
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+    })(chatEvent({ prompt: "hello" }));
+
+    expect(response.statusCode).toBe(502);
+    expect(repository.saveTurn).not.toHaveBeenCalled();
+  });
+
+  it("emits context truncation metrics without splitting history or dropping system prompt", async () => {
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const repository: ChatRepository = {
+      async queryHistoryTurns() {
+        return [
+          { prompt: "old prompt xxxxx", response: "old response xxxxx" },
+          { prompt: "new prompt", response: "new response" },
+        ];
+      },
+      async saveTurn() {
+        return undefined;
+      },
+    };
+    const bedrockRequests: ConverseCommandInput[] = [];
+    const bedrockClient = {
+      async converse(input: ConverseCommandInput): Promise<ConverseCommandOutput> {
+        bedrockRequests.push(input);
+        return {
+          output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+          $metadata: {},
+        };
+      },
+    };
+
+    const response = await createHandler({
+      config: { ...baseConfig, maxContextChars: 30 },
+      repository,
+      bedrockClient,
+      nowMs: () => 1710000000000,
+    })(chatEvent({
+      prompt: "current",
+      system_prompt: "system stays separate",
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(bedrockRequests[0]?.system).toEqual([{ text: "system stays separate" }]);
+    expect(bedrockRequests[0]?.messages).toEqual([
+      { role: "user", content: [{ text: "new prompt" }] },
+      { role: "assistant", content: [{ text: "new response" }] },
+      { role: "user", content: [{ text: "current" }] },
+    ]);
+    const logs = consoleLog.mock.calls.map((call) => String(call[0]));
+    expect(logs.some((line) => line.includes("ContextTruncatedCount"))).toBe(true);
+  });
+
+  it("keeps sensitive request content out of logs and metric dimensions", async () => {
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient("safe response");
+
+    await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+    })(chatEvent({
+      prompt: "secret prompt text",
+      session_id: "secret-session",
+      system_prompt: "secret system text",
+    }, "secret-user"));
+
+    const emitted = [
+      ...consoleLog.mock.calls.map((call) => String(call[0])),
+      ...consoleError.mock.calls.map((call) => String(call[0])),
+    ].join("\n");
+
+    expect(emitted).not.toContain("secret prompt text");
+    expect(emitted).not.toContain("secret system text");
+    expect(emitted).not.toContain("secret-user");
+    expect(emitted).not.toContain("secret-session");
+    expect(emitted).not.toContain("Authorization");
+
+    const metricEntries = consoleLog.mock.calls
+      .map((call) => JSON.parse(String(call[0])) as { _aws?: { CloudWatchMetrics?: Array<{ Dimensions: string[][] }> } })
+      .filter((entry) => entry._aws);
+    for (const entry of metricEntries) {
+      const dimensions = entry._aws?.CloudWatchMetrics?.flatMap((metric) => metric.Dimensions) ?? [];
+      expect(dimensions.flat()).not.toContain("user_id");
+      expect(dimensions.flat()).not.toContain("session_id");
+      expect(dimensions.flat()).not.toContain("requestId");
+    }
   });
 });

@@ -1,4 +1,3 @@
-import type { Message } from "@aws-sdk/client-bedrock-runtime";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
@@ -6,7 +5,11 @@ import {
   type QueryCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
-import { DynamoDbChatRepository } from "../src-ts/chatRepository";
+import {
+  createTurnSortKey,
+  DynamoDbChatRepository,
+  encodeSessionIdForSortKey,
+} from "../src-ts/chatRepository";
 
 interface MockDocumentClient {
   documentClient: DynamoDBDocumentClient;
@@ -32,19 +35,14 @@ function createRepository(mock: MockDocumentClient): DynamoDbChatRepository {
 
 function turn(timestamp: number, prompt: string, response: string): Record<string, unknown> {
   return {
+    user_id: "user-a",
     session_id: "session-1",
-    timestamp,
+    sk: createTurnSortKey("session-1", timestamp, `turn-${timestamp}`),
     prompt,
     response,
     model_id: "model",
+    expires_at: 1710604800,
   };
-}
-
-function textMessages(messages: Message[]): Array<{ role: Message["role"]; text: string }> {
-  return messages.map((message) => ({
-    role: message.role,
-    text: message.content?.[0]?.text ?? "",
-  }));
 }
 
 function getQueryInput(sentCommands: unknown[]): QueryCommandInput {
@@ -59,27 +57,54 @@ describe("DynamoDbChatRepository", () => {
     const mock = createMockDocumentClient([turn(1, "old prompt", "old response")]);
     const repository = createRepository(mock);
 
-    const messages = await repository.queryHistoryMessages("session-1", 0);
+    const turns = await repository.queryHistoryTurns("user-a", "session-1", 0);
 
-    expect(messages).toEqual([]);
+    expect(turns).toEqual([]);
     expect(mock.sentCommands).toEqual([]);
   });
 
-  it("queries the latest turns with descending sort order and the requested limit", async () => {
+  it("queries latest turns by authenticated user and session prefix", async () => {
     const mock = createMockDocumentClient();
     const repository = createRepository(mock);
 
-    await repository.queryHistoryMessages("session-1", 2);
+    await repository.queryHistoryTurns("user-a", "session-1", 2);
 
     expect(getQueryInput(mock.sentCommands)).toMatchObject({
       TableName: "chat-table",
-      KeyConditionExpression: "session_id = :session_id",
+      KeyConditionExpression: "user_id = :user_id AND begins_with(sk, :session_prefix)",
       ExpressionAttributeValues: {
-        ":session_id": "session-1",
+        ":user_id": "user-a",
+        ":session_prefix": "SESSION#c2Vzc2lvbi0x#",
       },
       ScanIndexForward: false,
       Limit: 2,
     });
+  });
+
+  it("uses the authenticated user key even when another user knows the same session ID", async () => {
+    const mock = createMockDocumentClient();
+    const repository = createRepository(mock);
+
+    await repository.queryHistoryTurns("user-b", "session-1", 2);
+
+    expect(getQueryInput(mock.sentCommands).ExpressionAttributeValues).toMatchObject({
+      ":user_id": "user-b",
+      ":session_prefix": "SESSION#c2Vzc2lvbi0x#",
+    });
+  });
+
+  it("encodes session IDs before building prefix keys to avoid delimiter collisions", async () => {
+    const mock = createMockDocumentClient();
+    const repository = createRepository(mock);
+    const sessionId = "demo#session/one: \u03b1";
+
+    await repository.queryHistoryTurns("user-a", sessionId, 2);
+
+    const expressionValues = getQueryInput(mock.sentCommands).ExpressionAttributeValues;
+    expect(expressionValues?.[":session_prefix"]).toBe(
+      `SESSION#${encodeSessionIdForSortKey(sessionId)}#`,
+    );
+    expect(String(expressionValues?.[":session_prefix"])).not.toContain(sessionId);
   });
 
   it("returns the latest turns in chronological order for Bedrock", async () => {
@@ -89,13 +114,11 @@ describe("DynamoDbChatRepository", () => {
     ]);
     const repository = createRepository(mock);
 
-    const messages = await repository.queryHistoryMessages("session-1", 2);
+    const turns = await repository.queryHistoryTurns("user-a", "session-1", 2);
 
-    expect(textMessages(messages)).toEqual([
-      { role: "user", text: "turn 4 prompt" },
-      { role: "assistant", text: "turn 4 response" },
-      { role: "user", text: "turn 5 prompt" },
-      { role: "assistant", text: "turn 5 response" },
+    expect(turns).toEqual([
+      { prompt: "turn 4 prompt", response: "turn 4 response" },
+      { prompt: "turn 5 prompt", response: "turn 5 response" },
     ]);
   });
 
@@ -106,42 +129,39 @@ describe("DynamoDbChatRepository", () => {
     ]);
     const repository = createRepository(mock);
 
-    const messages = await repository.queryHistoryMessages("session-1", 10);
+    const turns = await repository.queryHistoryTurns("user-a", "session-1", 10);
 
     expect(getQueryInput(mock.sentCommands).Limit).toBe(10);
-    expect(textMessages(messages)).toEqual([
-      { role: "user", text: "turn 1 prompt" },
-      { role: "assistant", text: "turn 1 response" },
-      { role: "user", text: "turn 2 prompt" },
-      { role: "assistant", text: "turn 2 response" },
+    expect(turns).toEqual([
+      { prompt: "turn 1 prompt", response: "turn 1 response" },
+      { prompt: "turn 2 prompt", response: "turn 2 response" },
     ]);
-  });
-
-  it("returns an empty message list when DynamoDB has no history", async () => {
-    const mock = createMockDocumentClient();
-    const repository = createRepository(mock);
-
-    const messages = await repository.queryHistoryMessages("session-1", 3);
-
-    expect(messages).toEqual([]);
   });
 
   it("skips incomplete or invalid chat turn items", async () => {
     const mock = createMockDocumentClient([
       turn(6, "new prompt", "new response"),
-      { session_id: "session-1", timestamp: 5, prompt: "missing response" },
-      { session_id: "session-1", timestamp: 4, response: "missing prompt" },
+      { session_id: "session-1", sk: "SESSION#c2Vzc2lvbi0x#5", prompt: "missing response" },
+      { session_id: "session-1", sk: "SESSION#c2Vzc2lvbi0x#4", response: "missing prompt" },
       turn(3, "   ", "blank prompt"),
       turn(2, "blank response", "   "),
-      { session_id: "session-1", timestamp: 1, prompt: 123, response: "wrong type" },
+      { session_id: "session-1", sk: "SESSION#c2Vzc2lvbi0x#1", prompt: 123, response: "wrong type" },
     ]);
     const repository = createRepository(mock);
 
-    const messages = await repository.queryHistoryMessages("session-1", 6);
+    const turns = await repository.queryHistoryTurns("user-a", "session-1", 6);
 
-    expect(textMessages(messages)).toEqual([
-      { role: "user", text: "new prompt" },
-      { role: "assistant", text: "new response" },
+    expect(turns).toEqual([
+      { prompt: "new prompt", response: "new response" },
     ]);
+  });
+
+  it("creates unique same-millisecond sort keys with caller-provided turn IDs", () => {
+    expect(createTurnSortKey("session-1", 1710000000000, "turn-a")).toBe(
+      "SESSION#c2Vzc2lvbi0x#1710000000000#turn-a",
+    );
+    expect(createTurnSortKey("session-1", 1710000000000, "turn-b")).toBe(
+      "SESSION#c2Vzc2lvbi0x#1710000000000#turn-b",
+    );
   });
 });

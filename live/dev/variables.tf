@@ -23,6 +23,28 @@ variable "lambda_runtime" {
   default = "nodejs22.x"
 }
 
+variable "chat_retention_days" {
+  description = "Chat history retention window written to DynamoDB TTL as epoch seconds."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.chat_retention_days >= 1 && var.chat_retention_days <= 365
+    error_message = "chat_retention_days must be between 1 and 365."
+  }
+}
+
+variable "max_context_chars" {
+  description = "Approximate application-level character budget for prior chat history sent to Bedrock."
+  type        = number
+  default     = 24000
+
+  validation {
+    condition     = var.max_context_chars >= 1000 && var.max_context_chars <= 200000
+    error_message = "max_context_chars must be between 1000 and 200000."
+  }
+}
+
 variable "bedrock_model_id" {
   description = "System-defined Bedrock inference profile ID used by the Lambda MODEL_ID environment variable."
   type        = string

@@ -6,3 +6,6 @@
 # bedrock_model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 # bedrock_foundation_model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 # bedrock_inference_profile_destination_regions = ["us-east-1", "us-east-2", "us-west-2"]
+#
+# chat_retention_days = 7
+# max_context_chars = 24000

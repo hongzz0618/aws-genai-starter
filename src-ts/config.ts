@@ -3,8 +3,11 @@ export const SERVICE_NAME = "aws-genai-starter";
 export interface AppConfig {
   chatTable?: string;
   awsRegion: string;
+  environment: string;
   modelId: string;
   historyTurns: number;
+  maxContextChars: number;
+  retentionDays: number;
   maxTokens: number;
   temperature: number;
   topP: number;
@@ -14,12 +17,34 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     chatTable: env.CHAT_TABLE,
     awsRegion: env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "us-east-1",
+    environment: nonBlank(env.ENVIRONMENT, "dev"),
     modelId: env.MODEL_ID ?? "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-    historyTurns: parseInteger(env.HISTORY_TURNS, 10),
-    maxTokens: parseInteger(env.MAX_TOKENS, 1024),
-    temperature: parseNumber(env.TEMPERATURE, 0.2),
-    topP: parseNumber(env.TOP_P, 1),
+    historyTurns: parseIntegerInRange(env.HISTORY_TURNS, 10, 0, 20),
+    maxContextChars: parseIntegerInRange(env.MAX_CONTEXT_CHARS, 24000, 1, 200000),
+    retentionDays: parseIntegerInRange(env.CHAT_RETENTION_DAYS, 7, 1, 365),
+    maxTokens: parseIntegerInRange(env.MAX_TOKENS, 1024, 1, 4096),
+    temperature: parseNumberInRange(env.TEMPERATURE, 0.2, 0, 1),
+    topP: parseNumberInRange(env.TOP_P, 1, 0, 1),
   };
+}
+
+function nonBlank(value: string | undefined, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : fallback;
+}
+
+function parseIntegerInRange(
+  value: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const parsed = parseInteger(value, fallback);
+  if (parsed < min || parsed > max) {
+    throw new Error(`Invalid integer config value: ${value ?? parsed}`);
+  }
+
+  return parsed;
 }
 
 function parseInteger(value: string | undefined, fallback: number): number {
@@ -28,11 +53,11 @@ function parseInteger(value: string | undefined, fallback: number): number {
   }
 
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
     throw new Error(`Invalid integer config value: ${value}`);
   }
 
-  return Math.trunc(parsed);
+  return parsed;
 }
 
 function parseNumber(value: string | undefined, fallback: number): number {
@@ -43,6 +68,20 @@ function parseNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
     throw new Error(`Invalid numeric config value: ${value}`);
+  }
+
+  return parsed;
+}
+
+function parseNumberInRange(
+  value: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const parsed = parseNumber(value, fallback);
+  if (parsed < min || parsed > max) {
+    throw new Error(`Invalid numeric config value: ${value ?? parsed}`);
   }
 
   return parsed;

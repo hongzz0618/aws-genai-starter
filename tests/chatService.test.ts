@@ -1,0 +1,123 @@
+import { describe, expect, it } from "vitest";
+import { buildBoundedContextMessages } from "../src-ts/chatService";
+import { loadConfig } from "../src-ts/config";
+
+function messageTexts(result: ReturnType<typeof buildBoundedContextMessages>): string[] {
+  return result.messages.map((message) => message.content?.[0]?.text ?? "");
+}
+
+describe("buildBoundedContextMessages", () => {
+  it("keeps all history when it is within the character budget", () => {
+    const result = buildBoundedContextMessages([
+      { prompt: "old user", response: "old assistant" },
+      { prompt: "new user", response: "new assistant" },
+    ], "current prompt", 1000);
+
+    expect(result.truncated).toBe(false);
+    expect(messageTexts(result)).toEqual([
+      "old user",
+      "old assistant",
+      "new user",
+      "new assistant",
+      "current prompt",
+    ]);
+  });
+
+  it("removes the oldest complete turn when history exceeds the budget", () => {
+    const result = buildBoundedContextMessages([
+      { prompt: "old user xxxx", response: "old assistant xxxx" },
+      { prompt: "new user", response: "new assistant" },
+    ], "current", 31);
+
+    expect(result.truncated).toBe(true);
+    expect(messageTexts(result)).toEqual([
+      "new user",
+      "new assistant",
+      "current",
+    ]);
+  });
+
+  it("does not split a user/assistant turn", () => {
+    const result = buildBoundedContextMessages([
+      { prompt: "old user", response: "old assistant" },
+      { prompt: "recent user", response: "recent assistant" },
+    ], "current", 20);
+
+    expect(result.truncated).toBe(true);
+    expect(messageTexts(result)).toEqual(["current"]);
+  });
+
+  it("keeps a contiguous newest suffix and does not keep older turns after a newer turn is removed", () => {
+    const result = buildBoundedContextMessages([
+      { prompt: "tiny", response: "old" },
+      { prompt: "recent prompt is too large", response: "recent response is too large" },
+    ], "current", 20);
+
+    expect(result.truncated).toBe(true);
+    expect(messageTexts(result)).toEqual(["current"]);
+  });
+
+  it("keeps a complete turn when the budget boundary is exactly met", () => {
+    const result = buildBoundedContextMessages([
+      { prompt: "abc", response: "def" },
+    ], "current", 13);
+
+    expect(result.truncated).toBe(false);
+    expect(messageTexts(result)).toEqual(["abc", "def", "current"]);
+  });
+
+  it("always keeps the current prompt even when it exceeds the budget", () => {
+    const result = buildBoundedContextMessages([
+      { prompt: "old user", response: "old assistant" },
+    ], "current prompt that is longer than the configured budget", 5);
+
+    expect(result.truncated).toBe(true);
+    expect(messageTexts(result)).toEqual([
+      "current prompt that is longer than the configured budget",
+    ]);
+  });
+
+  it("keeps zero-history behavior as only the current prompt", () => {
+    const result = buildBoundedContextMessages([], "current", 100);
+
+    expect(result.truncated).toBe(false);
+    expect(messageTexts(result)).toEqual(["current"]);
+  });
+});
+
+describe("loadConfig retention and context settings", () => {
+  it("loads bounded context and retention defaults", () => {
+    expect(loadConfig({}).maxContextChars).toBe(24000);
+    expect(loadConfig({}).retentionDays).toBe(7);
+  });
+
+  it("fails fast for invalid retention configuration", () => {
+    expect(() => loadConfig({ CHAT_RETENTION_DAYS: "0" })).toThrow(
+      "Invalid integer config value",
+    );
+    expect(() => loadConfig({ CHAT_RETENTION_DAYS: "366" })).toThrow(
+      "Invalid integer config value",
+    );
+    expect(() => loadConfig({ CHAT_RETENTION_DAYS: "1.5" })).toThrow(
+      "Invalid integer config value",
+    );
+  });
+
+  it("fails fast for invalid context budget configuration", () => {
+    expect(() => loadConfig({ MAX_CONTEXT_CHARS: "0" })).toThrow(
+      "Invalid integer config value",
+    );
+    expect(() => loadConfig({ MAX_CONTEXT_CHARS: "100.5" })).toThrow(
+      "Invalid integer config value",
+    );
+  });
+
+  it("fails fast for invalid numeric generation settings", () => {
+    expect(() => loadConfig({ TEMPERATURE: "1.1" })).toThrow(
+      "Invalid numeric config value",
+    );
+    expect(() => loadConfig({ TOP_P: "-0.1" })).toThrow(
+      "Invalid numeric config value",
+    );
+  });
+});

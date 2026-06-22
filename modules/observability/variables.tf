@@ -8,6 +8,11 @@ variable "environment" {
   type        = string
 }
 
+variable "metric_service_name" {
+  description = "Service dimension value emitted by application EMF metrics."
+  type        = string
+}
+
 variable "region" {
   description = "AWS region."
   type        = string

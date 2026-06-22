@@ -3,20 +3,27 @@ import type {
   ConverseCommandOutput,
   Message,
 } from "@aws-sdk/client-bedrock-runtime";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { AppConfig } from "./config";
-import { loadConfig } from "./config";
+import { SERVICE_NAME, loadConfig } from "./config";
 import {
   AwsBedrockConverseClient,
   extractResponseText,
   type BedrockConverseClient,
 } from "./bedrockClient";
 import {
+  createTurnSortKey,
   DynamoDbChatRepository,
   type ChatRepository,
 } from "./chatRepository";
 import { jsonResponse } from "./response";
-import type { ChatSuccessResponseBody, ChatTurnItem, HttpEvent, LambdaResponse } from "./types";
+import type {
+  ChatHistoryTurn,
+  ChatSuccessResponseBody,
+  ChatTurnItem,
+  HttpEvent,
+  LambdaResponse,
+} from "./types";
 import {
   CHAT_REQUEST_LIMITS,
   INVALID_CHAT_REQUEST_ERROR,
@@ -33,6 +40,7 @@ export interface ChatDependencies {
   repository?: ChatRepository;
   bedrockClient?: BedrockConverseClient;
   generateSessionId?: () => string;
+  generateTurnId?: () => string;
   nowMs?: () => number;
 }
 
@@ -40,6 +48,9 @@ export async function handleChat(
   event: HttpEvent,
   dependencies: ChatDependencies = {},
 ): Promise<LambdaResponse> {
+  const startedAt = (dependencies.nowMs ?? Date.now)();
+  let telemetryContext: ChatTelemetryContext | undefined;
+
   try {
     const config = dependencies.config ?? loadConfig();
 
@@ -47,7 +58,13 @@ export async function handleChat(
       throw new ChatServiceError("ConfigurationError");
     }
 
+    const userId = extractAuthenticatedUserId(event);
     const payload = parseJsonBody(event);
+
+    if (Object.prototype.hasOwnProperty.call(payload, "user_id")) {
+      throw new InvalidChatRequestError();
+    }
+
     const sessionId =
       optionalTrimmedString(payload.session_id, {
         maxLength: CHAT_REQUEST_LIMITS.sessionIdMaxLength,
@@ -96,12 +113,24 @@ export async function handleChat(
     const bedrockClient =
       dependencies.bedrockClient ?? new AwsBedrockConverseClient(config.awsRegion);
 
-    const messages = await repository.queryHistoryMessages(sessionId, historyTurns);
-    messages.push(createTextMessage("user", prompt));
+    telemetryContext = {
+      environment: config.environment,
+      modelId,
+      requestId: event.requestContext?.requestId,
+      userHash: stableHash(userId),
+      sessionHash: stableHash(sessionId),
+    };
+    emitMetrics({
+      context: telemetryContext,
+      metrics: [{ name: "ChatRequestCount", unit: "Count", value: 1 }],
+    });
+
+    const history = await repository.queryHistoryTurns(userId, sessionId, historyTurns);
+    const boundedContext = buildBoundedContextMessages(history, prompt, config.maxContextChars);
 
     const bedrockRequest: ConverseCommandInput = {
       modelId,
-      messages,
+      messages: boundedContext.messages,
       inferenceConfig: {
         maxTokens,
         temperature,
@@ -113,25 +142,55 @@ export async function handleChat(
       bedrockRequest.system = [{ text: systemPrompt }];
     }
 
+    const bedrockStartedAt = (dependencies.nowMs ?? Date.now)();
     const bedrockResponse = await bedrockClient.converse(bedrockRequest);
-    const responseText = extractResponseText(bedrockResponse);
+    const bedrockLatency = Math.max(0, (dependencies.nowMs ?? Date.now)() - bedrockStartedAt);
+    const responseText = extractResponseText(bedrockResponse).trim();
+    if (!responseText) {
+      throw new ChatServiceError("EmptyBedrockResponse");
+    }
+
     const timestamp = (dependencies.nowMs ?? Date.now)();
-    const usage = bedrockResponse.usage ?? {};
+    const usage = bedrockResponse.usage;
+    const turnId = (dependencies.generateTurnId ?? randomUUID)();
 
     await repository.saveTurn(createTurnItem({
+      userId,
       sessionId,
+      turnId,
       timestamp,
       prompt,
       responseText,
       modelId,
       bedrockResponse,
+      retentionDays: config.retentionDays,
     }));
+
+    const latency = Math.max(0, timestamp - startedAt);
+    logInfo("chat_request_succeeded", {
+      ...telemetryContext,
+      latencyMs: latency,
+      bedrockLatencyMs: bedrockLatency,
+      historyTurnCount: history.length,
+      contextTruncated: boundedContext.truncated,
+    });
+    emitMetrics({
+      context: telemetryContext,
+      metrics: [
+        { name: "ChatSuccessCount", unit: "Count", value: 1 },
+        { name: "BedrockLatency", unit: "Milliseconds", value: bedrockLatency },
+        ...usageMetrics(usage),
+        ...(boundedContext.truncated
+          ? [{ name: "ContextTruncatedCount", unit: "Count" as const, value: 1 }]
+          : []),
+      ],
+    });
 
     const responseBody: ChatSuccessResponseBody = {
       session_id: sessionId,
       timestamp,
       response: responseText,
-      usage,
+      usage: usage ?? {},
       stopReason: bedrockResponse.stopReason,
     };
 
@@ -139,7 +198,19 @@ export async function handleChat(
   } catch (error) {
     const failure = classifyChatFailure(error);
     if (failure.category !== "invalid_request") {
-      logChatError(error, failure.category);
+      logChatError(error, failure.category, telemetryContext);
+    }
+    if (telemetryContext) {
+      emitMetrics({
+        context: telemetryContext,
+        failureCategory: failure.category,
+        metrics: [
+          { name: "ChatFailureCount", unit: "Count", value: 1 },
+          ...(failure.category === "bedrock_retryable"
+            ? [{ name: "BedrockThrottleCount", unit: "Count" as const, value: 1 }]
+            : []),
+        ],
+      });
     }
     return jsonResponse(failure.statusCode, { error: failure.publicError });
   }
@@ -160,6 +231,14 @@ interface ChatFailure {
 
 function classifyChatFailure(error: unknown): ChatFailure {
   const errorName = getErrorName(error);
+
+  if (error instanceof UnauthorizedChatRequestError) {
+    return {
+      statusCode: 401,
+      publicError: "Unauthorized",
+      category: "unauthorized",
+    };
+  }
 
   if (error instanceof InvalidChatRequestError) {
     return {
@@ -190,6 +269,14 @@ function classifyChatFailure(error: unknown): ChatFailure {
       statusCode: 502,
       publicError: "Chat request failed",
       category: "bedrock_validation",
+    };
+  }
+
+  if (errorName === "EmptyBedrockResponse") {
+    return {
+      statusCode: 502,
+      publicError: "Chat request failed",
+      category: "bedrock_empty_response",
     };
   }
 
@@ -230,50 +317,184 @@ function getErrorStatusCode(error: unknown): number | undefined {
   return typeof metadata?.httpStatusCode === "number" ? metadata.httpStatusCode : undefined;
 }
 
-function logChatError(error: unknown, category: string): void {
+function logChatError(
+  error: unknown,
+  category: string,
+  context: ChatTelemetryContext | undefined,
+): void {
   const errorFields = error instanceof Error
     ? { errorName: error.name }
     : { errorName: "UnknownError" };
   const httpStatusCode = getErrorStatusCode(error);
 
-  console.error(JSON.stringify({
-    level: "error",
-    event: "chat_request_failed",
-    message: "Chat request failed",
-    category,
+  logError("chat_request_failed", {
+    ...context,
+    failureCategory: category,
     ...errorFields,
     ...(httpStatusCode === undefined ? {} : { httpStatusCode }),
-  }));
+  });
 }
 
 function createTextMessage(role: "user" | "assistant", text: string): Message {
   return { role, content: [{ text }] };
 }
 
+function extractAuthenticatedUserId(event: HttpEvent): string {
+  const sub = event.requestContext?.authorizer?.jwt?.claims?.sub;
+  if (typeof sub !== "string" || sub.trim().length === 0) {
+    throw new UnauthorizedChatRequestError();
+  }
+
+  return sub.trim();
+}
+
+class UnauthorizedChatRequestError extends Error {
+  constructor() {
+    super("Unauthorized");
+    this.name = "UnauthorizedChatRequestError";
+  }
+}
+
+export function buildBoundedContextMessages(
+  history: ChatHistoryTurn[],
+  currentPrompt: string,
+  maxContextChars: number,
+): { messages: Message[]; truncated: boolean } {
+  const selected: ChatHistoryTurn[] = [];
+  let usedChars = currentPrompt.length;
+
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const turn = history[index];
+    const turnChars = turn.prompt.length + turn.response.length;
+    if (usedChars + turnChars <= maxContextChars) {
+      selected.unshift(turn);
+      usedChars += turnChars;
+    } else {
+      break;
+    }
+  }
+
+  const messages = selected.flatMap((turn) => [
+    createTextMessage("user", turn.prompt),
+    createTextMessage("assistant", turn.response),
+  ]);
+  messages.push(createTextMessage("user", currentPrompt));
+
+  return {
+    messages,
+    truncated: selected.length !== history.length,
+  };
+}
+
 function createTurnItem(input: {
+  userId: string;
   sessionId: string;
+  turnId: string;
   timestamp: number;
   prompt: string;
   responseText: string;
   modelId: string;
   bedrockResponse: ConverseCommandOutput;
+  retentionDays: number;
 }): ChatTurnItem {
   const item: ChatTurnItem = {
+    user_id: input.userId,
     session_id: input.sessionId,
+    sk: createTurnSortKey(input.sessionId, input.timestamp, input.turnId),
     timestamp: input.timestamp,
     prompt: input.prompt,
     response: input.responseText,
     model_id: input.modelId,
+    expires_at: Math.floor(input.timestamp / 1000) + input.retentionDays * 24 * 60 * 60,
   };
 
   const usage = input.bedrockResponse.usage;
-  if (usage?.inputTokens !== undefined) {
+  if (typeof usage?.inputTokens === "number" && Number.isFinite(usage.inputTokens)) {
     item.input_tokens = Number(usage.inputTokens);
   }
 
-  if (usage?.outputTokens !== undefined) {
+  if (typeof usage?.outputTokens === "number" && Number.isFinite(usage.outputTokens)) {
     item.output_tokens = Number(usage.outputTokens);
   }
 
   return item;
+}
+
+interface ChatTelemetryContext {
+  environment: string;
+  modelId: string;
+  requestId?: string;
+  userHash: string;
+  sessionHash: string;
+}
+
+interface MetricValue {
+  name: string;
+  unit: "Count" | "Milliseconds";
+  value: number;
+}
+
+function usageMetrics(usage: ConverseCommandOutput["usage"]): MetricValue[] {
+  return [
+    { name: "InputTokens", unit: "Count", value: usage?.inputTokens },
+    { name: "OutputTokens", unit: "Count", value: usage?.outputTokens },
+    { name: "TotalTokens", unit: "Count", value: usage?.totalTokens },
+  ].filter((metric): metric is MetricValue => (
+    typeof metric.value === "number" && Number.isFinite(metric.value)
+  ));
+}
+
+function emitMetrics(input: {
+  context: ChatTelemetryContext;
+  metrics: MetricValue[];
+  failureCategory?: string;
+}): void {
+  if (input.metrics.length === 0) {
+    return;
+  }
+
+  const dimensions = input.failureCategory
+    ? [["Service", "Environment", "Model", "FailureCategory"], ["Service", "Environment"]]
+    : [["Service", "Environment", "Model"]];
+
+  console.log(JSON.stringify({
+    _aws: {
+      Timestamp: Date.now(),
+      CloudWatchMetrics: [{
+        Namespace: "AwsGenAiStarter",
+        Dimensions: dimensions,
+        Metrics: input.metrics.map((metric) => ({
+          Name: metric.name,
+          Unit: metric.unit,
+        })),
+      }],
+    },
+    Service: SERVICE_NAME,
+    Environment: input.context.environment,
+    Model: input.context.modelId,
+    ...(input.failureCategory ? { FailureCategory: input.failureCategory } : {}),
+    ...Object.fromEntries(input.metrics.map((metric) => [metric.name, metric.value])),
+  }));
+}
+
+function logInfo(event: string, fields: Record<string, unknown>): void {
+  console.log(JSON.stringify({
+    level: "info",
+    service: SERVICE_NAME,
+    event,
+    ...fields,
+  }));
+}
+
+function logError(event: string, fields: Record<string, unknown>): void {
+  console.error(JSON.stringify({
+    level: "error",
+    service: SERVICE_NAME,
+    event,
+    ...fields,
+  }));
+}
+
+function stableHash(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }

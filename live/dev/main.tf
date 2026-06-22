@@ -25,30 +25,36 @@ module "iam_lambda" {
   tags                           = var.tags
 }
 
-# 2) DynamoDB chat history table
-module "chat_table" {
-  source       = "../../modules/dynamodb_table"
-  name         = local.chat_table
-  hash_key     = "session_id"
-  range_key    = "timestamp"
-  billing_mode = "PAY_PER_REQUEST"
-  tags         = var.tags
+# 2) Cognito user pool and app client for API JWT authentication
+module "auth" {
+  source = "../../modules/cognito_auth"
+  name   = "${local.name_prefix}-auth"
+  tags   = var.tags
 }
 
-# 3) Scoped policy for Lambda access to the table
+# 3) DynamoDB chat history table
+module "chat_table" {
+  source         = "../../modules/dynamodb_table"
+  name           = local.chat_table
+  hash_key       = "user_id"
+  range_key      = "sk"
+  range_key_type = "S"
+  billing_mode   = "PAY_PER_REQUEST"
+  ttl_attribute  = "expires_at"
+  tags           = var.tags
+}
+
+# 4) Scoped policy for Lambda access to the table
 resource "aws_iam_policy" "lambda_dynamodb" {
   name        = "${local.name_prefix}-lambda-dynamodb"
   description = "Lambda access to chat history DynamoDB"
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Sid    = "ChatTableRW",
-      Effect = "Allow",
-      Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchWriteItem"],
-      Resource = [
-        module.chat_table.table_arn,
-        "${module.chat_table.table_arn}/index/*"
-      ]
+      Sid      = "ChatTableRW",
+      Effect   = "Allow",
+      Action   = ["dynamodb:PutItem", "dynamodb:Query"],
+      Resource = [module.chat_table.table_arn]
     }]
   })
 }
@@ -58,7 +64,7 @@ resource "aws_iam_role_policy_attachment" "attach_ddb" {
   policy_arn = aws_iam_policy.lambda_dynamodb.arn
 }
 
-# 4) Lambda (TypeScript build packaged in build/lambda.zip)
+# 5) Lambda (TypeScript build packaged in build/lambda.zip)
 module "lambda_api" {
   source             = "../../modules/lambda_function"
   function_name      = "${var.project}-${local.lambda_fn}"
@@ -70,16 +76,19 @@ module "lambda_api" {
   timeout_seconds    = 15
   log_retention_days = 14
   environment = {
-    CHAT_TABLE    = module.chat_table.table_name
-    MODEL_ID      = local.bedrock_model_id
-    HISTORY_TURNS = "10"
-    TEMPERATURE   = "0.2"
-    MAX_TOKENS    = "1024"
+    CHAT_TABLE          = module.chat_table.table_name
+    ENVIRONMENT         = var.env
+    MODEL_ID            = local.bedrock_model_id
+    HISTORY_TURNS       = "10"
+    MAX_CONTEXT_CHARS   = tostring(var.max_context_chars)
+    CHAT_RETENTION_DAYS = tostring(var.chat_retention_days)
+    TEMPERATURE         = "0.2"
+    MAX_TOKENS          = "1024"
   }
   tags = var.tags
 }
 
-# 5) API Gateway HTTP v2 routes for /health and /chat
+# 6) API Gateway HTTP v2 routes for /health and /chat
 module "api_http" {
   source             = "../../modules/api_http"
   name               = "${local.name_prefix}-http"
@@ -87,19 +96,31 @@ module "api_http" {
   lambda_name        = module.lambda_api.function_name
   cors_allow_origins = ["*"]
   cors_allow_methods = ["GET", "POST", "OPTIONS"]
-  cors_allow_headers = ["Content-Type"]
+  cors_allow_headers = ["Authorization", "Content-Type"]
+  jwt_authorizers = {
+    cognito = {
+      issuer   = module.auth.issuer
+      audience = [module.auth.user_pool_client_id]
+    }
+  }
   routes = {
-    "GET /health" = "default"
-    "POST /chat"  = "default"
+    "GET /health" = {
+      authorization_type = "NONE"
+    }
+    "POST /chat" = {
+      authorization_type = "JWT"
+      authorizer_key     = "cognito"
+    }
   }
   tags = var.tags
 }
 
 module "observability" {
-  source      = "../../modules/observability"
-  project     = var.project
-  environment = var.env
-  region      = var.region
+  source              = "../../modules/observability"
+  project             = var.project
+  environment         = var.env
+  metric_service_name = "aws-genai-starter"
+  region              = var.region
 
   tags = {
     Owner = var.project

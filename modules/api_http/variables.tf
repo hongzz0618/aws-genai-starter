@@ -2,7 +2,26 @@ variable "name" { type = string }
 variable "lambda_arn" { type = string }
 variable "lambda_name" { type = string }
 variable "routes" {
-  type = map(string)
+  type = map(object({
+    authorization_type = optional(string, "NONE")
+    authorizer_key     = optional(string)
+  }))
+}
+variable "jwt_authorizers" {
+  type = map(object({
+    issuer   = string
+    audience = list(string)
+  }))
+  default = {}
+}
+variable "access_log_retention_days" {
+  type    = number
+  default = 14
+
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.access_log_retention_days)
+    error_message = "access_log_retention_days must be a valid CloudWatch Logs retention value."
+  }
 }
 variable "cors_allow_origins" {
   type        = list(string)

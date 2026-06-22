@@ -2,6 +2,14 @@ export interface HttpRequestContext {
   http?: {
     method?: string;
   };
+  requestId?: string;
+  authorizer?: {
+    jwt?: {
+      claims?: {
+        sub?: unknown;
+      };
+    };
+  };
 }
 
 export interface HttpEvent {
@@ -29,6 +37,7 @@ export interface ErrorResponseBody {
 export interface ChatRequestBody {
   prompt?: unknown;
   session_id?: unknown;
+  user_id?: unknown;
   system_prompt?: unknown;
   model_id?: unknown;
   history_turns?: unknown;
@@ -38,13 +47,21 @@ export interface ChatRequestBody {
 }
 
 export interface ChatTurnItem {
+  user_id: string;
   session_id: string;
+  sk: string;
   timestamp: number;
   prompt: string;
   response: string;
   model_id: string;
+  expires_at: number;
   input_tokens?: number;
   output_tokens?: number;
+}
+
+export interface ChatHistoryTurn {
+  prompt: string;
+  response: string;
 }
 
 export interface ChatSuccessResponseBody {

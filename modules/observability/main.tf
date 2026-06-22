@@ -174,6 +174,52 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration_p95" {
   depends_on = [aws_sns_topic_policy.alerts_publish]
 }
 
+resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
+  for_each            = toset(var.lambda_function_names)
+  alarm_name          = "${each.value}-Throttles-High"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+
+  dimensions = {
+    FunctionName = each.value
+  }
+
+  alarm_description = "Lambda throttles for ${each.value}"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+  tags              = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
+}
+
+resource "aws_cloudwatch_metric_alarm" "bedrock_throttles" {
+  alarm_name          = "${var.project}-${var.environment}-BedrockThrottle-High"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "BedrockThrottleCount"
+  namespace           = "AwsGenAiStarter"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+
+  dimensions = {
+    Service     = var.metric_service_name
+    Environment = var.environment
+  }
+
+  alarm_description = "Bedrock retryable throttle or availability failures"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+  tags              = local.common_tags
+
+  depends_on = [aws_sns_topic_policy.alerts_publish]
+}
+
 # API Gateway 5XX and p95 latency
 resource "aws_cloudwatch_metric_alarm" "apigw_5xx" {
   alarm_name          = "${var.project}-${var.environment}-APIGW-5XX-High"

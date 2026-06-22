@@ -1,24 +1,25 @@
-import type { Message } from "@aws-sdk/client-bedrock-runtime";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
   PutCommand,
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
-import type { ChatTurnItem } from "./types";
+import type { ChatHistoryTurn, ChatTurnItem } from "./types";
 
 interface StoredChatItem {
+  user_id?: string;
   session_id?: string;
-  timestamp?: number;
+  sk?: string;
   prompt?: string;
   response?: string;
   model_id?: string;
+  expires_at?: number;
   input_tokens?: number;
   output_tokens?: number;
 }
 
 export interface ChatRepository {
-  queryHistoryMessages(sessionId: string, limit: number): Promise<Message[]>;
+  queryHistoryTurns(userId: string, sessionId: string, limit: number): Promise<ChatHistoryTurn[]>;
   saveTurn(item: ChatTurnItem): Promise<void>;
 }
 
@@ -34,17 +35,23 @@ export class DynamoDbChatRepository implements ChatRepository {
       documentClient ?? DynamoDBDocumentClient.from(new DynamoDBClient({ region }));
   }
 
-  async queryHistoryMessages(sessionId: string, limit: number): Promise<Message[]> {
+  async queryHistoryTurns(
+    userId: string,
+    sessionId: string,
+    limit: number,
+  ): Promise<ChatHistoryTurn[]> {
     if (limit <= 0) {
       return [];
     }
 
+    const sessionPrefix = getSessionSortKeyPrefix(sessionId);
     const response = await this.documentClient.send(
       new QueryCommand({
         TableName: this.tableName,
-        KeyConditionExpression: "session_id = :session_id",
+        KeyConditionExpression: "user_id = :user_id AND begins_with(sk, :session_prefix)",
         ExpressionAttributeValues: {
-          ":session_id": sessionId,
+          ":user_id": userId,
+          ":session_prefix": sessionPrefix,
         },
         ScanIndexForward: false,
         Limit: limit,
@@ -52,17 +59,10 @@ export class DynamoDbChatRepository implements ChatRepository {
     );
 
     const items = (response.Items ?? []) as StoredChatItem[];
-    const selectedItems = items.filter(isCompleteChatTurn).reverse();
-    const messages: Message[] = [];
-
-    for (const item of selectedItems) {
-      messages.push(
-        { role: "user", content: [{ text: item.prompt.trim() }] },
-        { role: "assistant", content: [{ text: item.response.trim() }] },
-      );
-    }
-
-    return messages;
+    return items.filter(isCompleteChatTurn).reverse().map((item) => ({
+      prompt: item.prompt.trim(),
+      response: item.response.trim(),
+    }));
   }
 
   async saveTurn(item: ChatTurnItem): Promise<void> {
@@ -73,6 +73,22 @@ export class DynamoDbChatRepository implements ChatRepository {
       }),
     );
   }
+}
+
+export function getSessionSortKeyPrefix(sessionId: string): string {
+  return `SESSION#${encodeSessionIdForSortKey(sessionId)}#`;
+}
+
+export function createTurnSortKey(sessionId: string, timestamp: number, turnId: string): string {
+  return `${getSessionSortKeyPrefix(sessionId)}${formatTimestamp(timestamp)}#${turnId}`;
+}
+
+export function encodeSessionIdForSortKey(sessionId: string): string {
+  return Buffer.from(sessionId, "utf8").toString("base64url");
+}
+
+function formatTimestamp(timestamp: number): string {
+  return Math.trunc(timestamp).toString().padStart(13, "0");
 }
 
 function isCompleteChatTurn(item: StoredChatItem): item is StoredChatItem & {
