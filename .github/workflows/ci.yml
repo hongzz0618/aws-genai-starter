@@ -68,3 +68,7 @@ jobs:
       - name: Terraform validate
         run: terraform validate -no-color
         working-directory: live/dev
+
+      - name: Terraform test
+        run: terraform test -no-color
+        working-directory: live/dev
