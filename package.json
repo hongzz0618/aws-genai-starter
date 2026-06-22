@@ -6,12 +6,16 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "contract:validate": "node scripts/validate_openapi.mjs",
+    "test:contract": "vitest run tests/contract.test.ts",
+    "artifacts:verify": "node scripts/run_bash_script.mjs scripts/verify_lambda_artifact.sh"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",
     "typescript": "^5.8.3",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "yaml": "^2.9.0"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1048.0",

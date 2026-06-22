@@ -34,17 +34,29 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Production dependency audit
+        run: npm audit --omit=dev
+
       - name: TypeScript typecheck
         run: npm run typecheck
 
       - name: Unit tests
         run: npm test
 
+      - name: OpenAPI validation
+        run: npm run contract:validate
+
+      - name: Contract tests
+        run: npm run test:contract
+
       - name: Build TypeScript Lambda
         run: npm run build
 
       - name: Package Lambda
         run: bash scripts/package_lambda.sh
+
+      - name: Verify Lambda artifact
+        run: npm run artifacts:verify
 
       - name: Terraform fmt
         run: terraform fmt -check -recursive

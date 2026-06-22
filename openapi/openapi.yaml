@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  title: AWS GenAI Starter API
+  version: 0.2.0
+  description: Authenticated serverless GenAI chat API reference.
+servers:
+  - url: https://example.execute-api.us-east-1.amazonaws.com
+    description: Placeholder deployed API URL
+components:
+  securitySchemes:
+    CognitoJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito User Pool JWT validated by API Gateway HTTP API JWT authorizer.
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          const: ok
+        service:
+          type: string
+          const: aws-genai-starter
+    ChatRequest:
+      type: object
+      required: [prompt]
+      additionalProperties: false
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        session_id:
+          type: string
+          maxLength: 128
+        system_prompt:
+          type: string
+          maxLength: 4000
+        history_turns:
+          type: integer
+          minimum: 0
+          maximum: 20
+        max_tokens:
+          type: integer
+          minimum: 1
+          maximum: 4096
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 1
+        top_p:
+          type: number
+          minimum: 0
+          maximum: 1
+    Usage:
+      type: object
+      additionalProperties: true
+      properties:
+        inputTokens:
+          type: integer
+          minimum: 0
+        outputTokens:
+          type: integer
+          minimum: 0
+        totalTokens:
+          type: integer
+          minimum: 0
+    ChatSuccessResponse:
+      type: object
+      required: [session_id, timestamp, response, usage]
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+        timestamp:
+          type: integer
+        response:
+          type: string
+        usage:
+          $ref: "#/components/schemas/Usage"
+        stopReason:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Public health check
+      security: []
+      responses:
+        "200":
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /chat:
+    post:
+      operationId: postChat
+      summary: Authenticated chat completion
+      security:
+        - CognitoJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Assistant response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSuccessResponse"
+        "400":
+          description: Invalid chat request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid JWT identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal processing failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Upstream model response failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Temporary model throttling or availability failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
