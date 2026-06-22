@@ -49,7 +49,9 @@ export async function handleChat(
 
     const payload = parseJsonBody(event);
     const sessionId =
-      optionalTrimmedString(payload.session_id) ??
+      optionalTrimmedString(payload.session_id, {
+        maxLength: CHAT_REQUEST_LIMITS.sessionIdMaxLength,
+      }) ??
       (dependencies.generateSessionId ?? randomUUID)();
     const prompt = requiredTrimmedString(payload.prompt, {
       maxLength: CHAT_REQUEST_LIMITS.promptMaxLength,
@@ -59,7 +61,9 @@ export async function handleChat(
       throw new InvalidChatRequestError();
     }
 
-    const systemPrompt = optionalTrimmedString(payload.system_prompt);
+    const systemPrompt = optionalTrimmedString(payload.system_prompt, {
+      maxLength: CHAT_REQUEST_LIMITS.systemPromptMaxLength,
+    });
     const modelId = config.modelId;
     const historyTurns = optionalIntegerInRange(
       payload.history_turns,

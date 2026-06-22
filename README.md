@@ -98,8 +98,8 @@ Example request body:
 Accepted request fields:
 
 - `prompt`: required string, 1 to 8000 trimmed characters.
-- `session_id`: optional string. If omitted or blank, the Lambda generates one.
-- `system_prompt`: optional string.
+- `session_id`: optional string, up to 128 trimmed characters. If omitted or blank, the Lambda generates one.
+- `system_prompt`: optional string, up to 4000 trimmed characters.
 - `history_turns`: optional integer from 0 to 20. Defaults to the Lambda configuration.
 - `max_tokens`: optional integer from 1 to 4096. Defaults to the Lambda configuration.
 - `temperature`: optional number from 0 to 1. Defaults to the Lambda configuration.
@@ -131,7 +131,7 @@ Example generic error response shape:
 }
 ```
 
-Malformed JSON, non-object request bodies, blank or oversized prompts, invalid field types, invalid numeric ranges, and request-level `model_id` values return:
+Malformed JSON, non-object request bodies, blank or oversized prompts, oversized session IDs or system prompts, invalid field types, invalid numeric ranges, and request-level `model_id` values return:
 
 ```json
 {

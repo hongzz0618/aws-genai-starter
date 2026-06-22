@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHandler } from "../src-ts/handler";
 import type { ChatRepository } from "../src-ts/chatRepository";
 import type { ChatTurnItem, HttpEvent } from "../src-ts/types";
+import { CHAT_REQUEST_LIMITS } from "../src-ts/validation";
 
 const baseConfig = {
   chatTable: "chat-table",
@@ -29,6 +30,50 @@ function namedAwsError(name: string, message: string, httpStatusCode?: number): 
   error.name = name;
   error.$metadata = { httpStatusCode };
   return error;
+}
+
+function createMockRepository(history: ConverseCommandInput["messages"] = []): ChatRepository & {
+  queryHistoryMessages: ReturnType<typeof vi.fn>;
+  saveTurn: ReturnType<typeof vi.fn>;
+} {
+  return {
+    queryHistoryMessages: vi.fn(async () => history),
+    saveTurn: vi.fn(async () => undefined),
+  };
+}
+
+function createMockBedrockClient(responseText = "mock response") {
+  return {
+    converse: vi.fn(async (): Promise<ConverseCommandOutput> => ({
+      output: {
+        message: {
+          role: "assistant",
+          content: [{ text: responseText }],
+        },
+      },
+      $metadata: {},
+    })),
+  };
+}
+
+async function expectInvalidBeforeDownstream(body: object): Promise<void> {
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const repository = createMockRepository();
+  const bedrockClient = createMockBedrockClient();
+
+  const response = await createHandler({
+    config: baseConfig,
+    repository,
+    bedrockClient,
+  })(chatEvent(body));
+
+  expect(response.statusCode).toBe(400);
+  expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
+  expect(response.body).not.toContain(String(Object.values(body)[0]));
+  expect(repository.queryHistoryMessages).not.toHaveBeenCalled();
+  expect(repository.saveTurn).not.toHaveBeenCalled();
+  expect(bedrockClient.converse).not.toHaveBeenCalled();
+  expect(consoleError).not.toHaveBeenCalled();
 }
 
 describe("handler", () => {
@@ -105,6 +150,56 @@ describe("handler", () => {
     expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
   });
 
+  it("accepts session_id at the trimmed maximum length", async () => {
+    const sessionId = "s".repeat(CHAT_REQUEST_LIMITS.sessionIdMaxLength);
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      nowMs: () => 1710000000002,
+    })(chatEvent({
+      prompt: "hello",
+      session_id: sessionId,
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).session_id).toBe(sessionId);
+    expect(repository.queryHistoryMessages).toHaveBeenCalledWith(sessionId, baseConfig.historyTurns);
+    expect(repository.saveTurn).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: sessionId,
+    }));
+  });
+
+  it("validates session_id length after trimming", async () => {
+    const sessionId = "s".repeat(CHAT_REQUEST_LIMITS.sessionIdMaxLength);
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      nowMs: () => 1710000000003,
+    })(chatEvent({
+      prompt: "hello",
+      session_id: `  ${sessionId}  `,
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).session_id).toBe(sessionId);
+    expect(repository.queryHistoryMessages).toHaveBeenCalledWith(sessionId, baseConfig.historyTurns);
+  });
+
+  it("rejects oversized session_id before DynamoDB or Bedrock calls", async () => {
+    await expectInvalidBeforeDownstream({
+      prompt: "hello",
+      session_id: "s".repeat(CHAT_REQUEST_LIMITS.sessionIdMaxLength + 1),
+    });
+  });
+
   it("returns 400 for POST /chat with invalid history_turns", async () => {
     const response = await createHandler({ config: baseConfig })(chatEvent({
       prompt: "hello",
@@ -153,6 +248,115 @@ describe("handler", () => {
       expect(response.statusCode).toBe(400);
       expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
     }
+  });
+
+  it("continues to generate a session ID when session_id is blank", async () => {
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      generateSessionId: () => "generated-session",
+      nowMs: () => 1710000000004,
+    })(chatEvent({
+      prompt: "hello",
+      session_id: "   ",
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).session_id).toBe("generated-session");
+    expect(repository.queryHistoryMessages).toHaveBeenCalledWith(
+      "generated-session",
+      baseConfig.historyTurns,
+    );
+  });
+
+  it("rejects non-string session_id before DynamoDB or Bedrock calls", async () => {
+    await expectInvalidBeforeDownstream({
+      prompt: "hello",
+      session_id: 123,
+    });
+  });
+
+  it("accepts system_prompt at the trimmed maximum length and sends it to Bedrock", async () => {
+    const systemPrompt = "s".repeat(CHAT_REQUEST_LIMITS.systemPromptMaxLength);
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      generateSessionId: () => "system-session",
+      nowMs: () => 1710000000005,
+    })(chatEvent({
+      prompt: "hello",
+      system_prompt: systemPrompt,
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(bedrockClient.converse).toHaveBeenCalledWith(expect.objectContaining({
+      system: [{ text: systemPrompt }],
+    }));
+  });
+
+  it("validates system_prompt length after trimming", async () => {
+    const systemPrompt = "s".repeat(CHAT_REQUEST_LIMITS.systemPromptMaxLength);
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      generateSessionId: () => "system-session",
+      nowMs: () => 1710000000006,
+    })(chatEvent({
+      prompt: "hello",
+      system_prompt: `  ${systemPrompt}  `,
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(bedrockClient.converse).toHaveBeenCalledWith(expect.objectContaining({
+      system: [{ text: systemPrompt }],
+    }));
+  });
+
+  it("does not add a Bedrock system prompt when system_prompt is blank", async () => {
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      generateSessionId: () => "system-session",
+      nowMs: () => 1710000000007,
+    })(chatEvent({
+      prompt: "hello",
+      system_prompt: "   ",
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(bedrockClient.converse).toHaveBeenCalledWith(expect.not.objectContaining({
+      system: expect.anything(),
+    }));
+  });
+
+  it("rejects oversized system_prompt before DynamoDB or Bedrock calls", async () => {
+    await expectInvalidBeforeDownstream({
+      prompt: "hello",
+      system_prompt: "s".repeat(CHAT_REQUEST_LIMITS.systemPromptMaxLength + 1),
+    });
+  });
+
+  it("rejects non-string system_prompt before DynamoDB or Bedrock calls", async () => {
+    await expectInvalidBeforeDownstream({
+      prompt: "hello",
+      system_prompt: 123,
+    });
   });
 
   it("returns 400 when request-level model_id is supplied", async () => {

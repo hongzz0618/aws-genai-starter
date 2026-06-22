@@ -4,6 +4,8 @@ export const INVALID_CHAT_REQUEST_ERROR = "Invalid chat request";
 
 export const CHAT_REQUEST_LIMITS = {
   promptMaxLength: 8000,
+  sessionIdMaxLength: 128,
+  systemPromptMaxLength: 4000,
   historyTurnsMin: 0,
   historyTurnsMax: 20,
   maxTokensMin: 1,
@@ -50,29 +52,37 @@ export function requiredTrimmedString(
   value: unknown,
   options: { maxLength?: number } = {},
 ): string {
-  if (typeof value !== "string") {
-    throw new InvalidChatRequestError();
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed || (options.maxLength !== undefined && trimmed.length > options.maxLength)) {
+  const trimmed = trimStringValue(value, options);
+  if (!trimmed) {
     throw new InvalidChatRequestError();
   }
 
   return trimmed;
 }
 
-export function optionalTrimmedString(value: unknown): string | undefined {
+export function optionalTrimmedString(
+  value: unknown,
+  options: { maxLength?: number } = {},
+): string | undefined {
   if (value === undefined) {
     return undefined;
   }
 
+  const trimmed = trimStringValue(value, options);
+  return trimmed || undefined;
+}
+
+function trimStringValue(value: unknown, options: { maxLength?: number }): string {
   if (typeof value !== "string") {
     throw new InvalidChatRequestError();
   }
 
   const trimmed = value.trim();
-  return trimmed || undefined;
+  if (options.maxLength !== undefined && trimmed.length > options.maxLength) {
+    throw new InvalidChatRequestError();
+  }
+
+  return trimmed;
 }
 
 export function optionalIntegerInRange(
