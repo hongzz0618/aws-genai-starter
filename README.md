@@ -22,9 +22,6 @@ flowchart LR
 
     Lambda -. "structured logs<br/>and metrics" .-> CloudWatch[CloudWatch]
     APIGW -. "API metrics" .-> CloudWatch
-
-    Lambda --> APIGW
-    APIGW --> Client
 ```
 
 Runtime flow for `POST /chat`:
@@ -146,7 +143,7 @@ Malformed JSON, non-object request bodies, blank or oversized prompts, oversized
 }
 ```
 
-Bedrock throttling and temporary availability failures return HTTP `503` with a generic body. Bedrock access failures, persistence failures, and unexpected internal failures return a generic HTTP `500` response.
+Bedrock throttling and temporary availability failures return HTTP `503` with a generic body. Bedrock validation failures return HTTP `502`. Bedrock access failures, persistence failures, and unexpected internal failures return a generic HTTP `500` response.
 
 AWS request IDs, raw SDK messages, table names, stack traces, prompts, system prompts, and complete request bodies are not returned to clients. Logs use the stable `chat_request_failed` event with safe metadata such as failure category, error name, and SDK HTTP status when available.
 
