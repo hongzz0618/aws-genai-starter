@@ -2,7 +2,7 @@
   "name": "aws-genai-starter",
   "version": "0.1.0",
   "private": true,
-  "description": "TypeScript serverless backend integrating Amazon Bedrock, Lambda, API Gateway, DynamoDB, Terraform, observability, and cost controls.",
+  "description": "Authenticated TypeScript GenAI backend on AWS with Cognito, API Gateway JWT authorization, Amazon Bedrock, user-scoped DynamoDB history, Terraform, and observability.",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
