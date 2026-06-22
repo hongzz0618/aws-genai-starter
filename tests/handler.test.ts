@@ -262,7 +262,11 @@ describe("handler", () => {
         topP: 0.9,
       },
     });
-    expect(bedrockRequests[0]?.messages).toHaveLength(3);
+    expect(bedrockRequests[0]?.messages).toEqual([
+      { role: "user", content: [{ text: "previous prompt" }] },
+      { role: "assistant", content: [{ text: "previous response" }] },
+      { role: "user", content: [{ text: "hello" }] },
+    ]);
     expect(savedItems).toEqual([
       {
         session_id: "session-1",

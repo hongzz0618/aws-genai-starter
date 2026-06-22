@@ -2,7 +2,7 @@
   "name": "aws-genai-starter",
   "version": "0.1.0",
   "private": true,
-  "description": "TypeScript Lambda migration skeleton for aws-genai-starter.",
+  "description": "TypeScript serverless backend integrating Amazon Bedrock, Lambda, API Gateway, DynamoDB, Terraform, observability, and cost controls.",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",

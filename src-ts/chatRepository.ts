@@ -35,6 +35,10 @@ export class DynamoDbChatRepository implements ChatRepository {
   }
 
   async queryHistoryMessages(sessionId: string, limit: number): Promise<Message[]> {
+    if (limit <= 0) {
+      return [];
+    }
+
     const response = await this.documentClient.send(
       new QueryCommand({
         TableName: this.tableName,
@@ -42,26 +46,20 @@ export class DynamoDbChatRepository implements ChatRepository {
         ExpressionAttributeValues: {
           ":session_id": sessionId,
         },
-        ScanIndexForward: true,
-        Limit: Math.max(limit, 1) * 50,
+        ScanIndexForward: false,
+        Limit: limit,
       }),
     );
 
     const items = (response.Items ?? []) as StoredChatItem[];
-    const selectedItems = items.slice(-limit);
+    const selectedItems = items.filter(isCompleteChatTurn).reverse();
     const messages: Message[] = [];
 
     for (const item of selectedItems) {
-      const prompt = (item.prompt ?? "").trim();
-      const responseText = (item.response ?? "").trim();
-
-      if (prompt) {
-        messages.push({ role: "user", content: [{ text: prompt }] });
-      }
-
-      if (responseText) {
-        messages.push({ role: "assistant", content: [{ text: responseText }] });
-      }
+      messages.push(
+        { role: "user", content: [{ text: item.prompt.trim() }] },
+        { role: "assistant", content: [{ text: item.response.trim() }] },
+      );
     }
 
     return messages;
@@ -75,4 +73,15 @@ export class DynamoDbChatRepository implements ChatRepository {
       }),
     );
   }
+}
+
+function isCompleteChatTurn(item: StoredChatItem): item is StoredChatItem & {
+  prompt: string;
+  response: string;
+} {
+  return isNonBlankString(item.prompt) && isNonBlankString(item.response);
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
