@@ -1,5 +1,7 @@
 # AWS GenAI Starter
 
+[![CI](https://github.com/hongzz0618/aws-genai-starter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hongzz0618/aws-genai-starter/actions/workflows/ci.yml)
+
 Authenticated serverless GenAI chat API reference on AWS.
 
 The project demonstrates a compact backend path with Cognito authentication, API Gateway JWT authorization, a TypeScript Lambda, Amazon Bedrock Converse, user-scoped DynamoDB chat history, bounded context, retention, structured telemetry, and Terraform validation.
