@@ -8,11 +8,6 @@ variable "region" {
   default = "us-east-1"
 }
 
-variable "lambda_zip" {
-  type    = string
-  default = "../lambda.zip"
-}
-
 variable "env" {
   type    = string
   default = "dev"
