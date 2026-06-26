@@ -16,6 +16,18 @@ export const CHAT_REQUEST_LIMITS = {
   topPMax: 1,
 } as const;
 
+export const CHAT_REQUEST_ALLOWED_FIELDS = [
+  "prompt",
+  "session_id",
+  "system_prompt",
+  "history_turns",
+  "max_tokens",
+  "temperature",
+  "top_p",
+] as const;
+
+const CHAT_REQUEST_ALLOWED_FIELD_SET = new Set<string>(CHAT_REQUEST_ALLOWED_FIELDS);
+
 export class InvalidChatRequestError extends Error {
   constructor() {
     super(INVALID_CHAT_REQUEST_ERROR);
@@ -43,6 +55,12 @@ export function parseJsonBody(event: HttpEvent): ChatRequestBody {
 
   if (!isRecord(parsed)) {
     throw new InvalidChatRequestError();
+  }
+
+  for (const key of Object.keys(parsed)) {
+    if (!CHAT_REQUEST_ALLOWED_FIELD_SET.has(key)) {
+      throw new InvalidChatRequestError();
+    }
   }
 
   return parsed;

@@ -37,9 +37,7 @@ export interface ErrorResponseBody {
 export interface ChatRequestBody {
   prompt?: unknown;
   session_id?: unknown;
-  user_id?: unknown;
   system_prompt?: unknown;
-  model_id?: unknown;
   history_turns?: unknown;
   max_tokens?: unknown;
   temperature?: unknown;

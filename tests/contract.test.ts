@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 import { createHandler } from "../src-ts/handler";
-import { CHAT_REQUEST_LIMITS } from "../src-ts/validation";
+import {
+  CHAT_REQUEST_ALLOWED_FIELDS,
+  CHAT_REQUEST_LIMITS,
+} from "../src-ts/validation";
 
 const root = process.cwd();
 const openApi = parse(readFileSync(join(root, "openapi/openapi.yaml"), "utf8")) as OpenApiDocument;
@@ -175,6 +178,17 @@ describe("OpenAPI contract", () => {
     expect(properties.history_turns.maximum).toBe(CHAT_REQUEST_LIMITS.historyTurnsMax);
     expect(properties.max_tokens.minimum).toBe(CHAT_REQUEST_LIMITS.maxTokensMin);
     expect(properties.max_tokens.maximum).toBe(CHAT_REQUEST_LIMITS.maxTokensMax);
+  });
+
+  it("keeps ChatRequest fields aligned with the runtime allowlist", () => {
+    const requestSchema = resolveSchema(
+      openApi.paths["/chat"].post.requestBody?.content["application/json"].schema ?? {},
+    );
+
+    expect(requestSchema.additionalProperties).toBe(false);
+    expect(Object.keys(requestSchema.properties ?? {}).sort()).toEqual(
+      [...CHAT_REQUEST_ALLOWED_FIELDS].sort(),
+    );
   });
 
   it("documents expected chat error statuses", () => {

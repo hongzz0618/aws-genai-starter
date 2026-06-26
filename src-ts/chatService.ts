@@ -61,10 +61,6 @@ export async function handleChat(
     const userId = extractAuthenticatedUserId(event);
     const payload = parseJsonBody(event);
 
-    if (Object.prototype.hasOwnProperty.call(payload, "user_id")) {
-      throw new InvalidChatRequestError();
-    }
-
     const sessionId =
       optionalTrimmedString(payload.session_id, {
         maxLength: CHAT_REQUEST_LIMITS.sessionIdMaxLength,
@@ -73,10 +69,6 @@ export async function handleChat(
     const prompt = requiredTrimmedString(payload.prompt, {
       maxLength: CHAT_REQUEST_LIMITS.promptMaxLength,
     });
-
-    if (Object.prototype.hasOwnProperty.call(payload, "model_id")) {
-      throw new InvalidChatRequestError();
-    }
 
     const systemPrompt = optionalTrimmedString(payload.system_prompt, {
       maxLength: CHAT_REQUEST_LIMITS.systemPromptMaxLength,

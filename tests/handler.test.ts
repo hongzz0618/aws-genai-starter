@@ -80,7 +80,11 @@ function createMockBedrockClient(responseText = "mock response") {
   };
 }
 
-async function expectInvalidBeforeDownstream(body: object): Promise<void> {
+async function expectInvalidBeforeDownstream(
+  body: object,
+  sensitiveValues: string[] = [],
+): Promise<void> {
+  const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const repository = createMockRepository();
   const bedrockClient = createMockBedrockClient();
@@ -93,10 +97,18 @@ async function expectInvalidBeforeDownstream(body: object): Promise<void> {
 
   expect(response.statusCode).toBe(400);
   expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
-  expect(response.body).not.toContain(String(Object.values(body)[0]));
   expect(repository.queryHistoryTurns).not.toHaveBeenCalled();
   expect(repository.saveTurn).not.toHaveBeenCalled();
   expect(bedrockClient.converse).not.toHaveBeenCalled();
+  const emitted = [
+    ...consoleLog.mock.calls.map((call) => String(call[0])),
+    ...consoleError.mock.calls.map((call) => String(call[0])),
+  ].join("\n");
+  for (const value of sensitiveValues) {
+    expect(response.body).not.toContain(value);
+    expect(emitted).not.toContain(value);
+  }
+  expect(consoleLog).not.toHaveBeenCalled();
   expect(consoleError).not.toHaveBeenCalled();
 }
 
@@ -174,21 +186,17 @@ describe("handler", () => {
   });
 
   it("rejects client-supplied user_id in the request body", async () => {
-    const repository = createMockRepository();
-    const bedrockClient = createMockBedrockClient();
-
-    const response = await createHandler({
-      config: baseConfig,
-      repository,
-      bedrockClient,
-    })(chatEvent({
+    await expectInvalidBeforeDownstream({
       prompt: "hello",
       user_id: "attacker-user",
-    }));
+    }, ["attacker-user"]);
+  });
 
-    expect(response.statusCode).toBe(400);
-    expect(repository.queryHistoryTurns).not.toHaveBeenCalled();
-    expect(bedrockClient.converse).not.toHaveBeenCalled();
+  it("rejects unknown top-level request fields before DynamoDB or Bedrock calls", async () => {
+    await expectInvalidBeforeDownstream({
+      prompt: "hello",
+      unexpected_field: "sensitive unexpected value",
+    }, ["sensitive unexpected value"]);
   });
 
   it("returns 400 for POST /chat with a missing prompt", async () => {
@@ -434,23 +442,10 @@ describe("handler", () => {
   });
 
   it("returns 400 when request-level model_id is supplied", async () => {
-    const bedrockClient = {
-      converse: vi.fn(async (): Promise<ConverseCommandOutput> => ({
-        output: { message: { role: "assistant", content: [{ text: "unused" }] } },
-        $metadata: {},
-      })),
-    };
-    const response = await createHandler({
-      config: baseConfig,
-      bedrockClient,
-    })(chatEvent({
+    await expectInvalidBeforeDownstream({
       prompt: "hello",
       model_id: "override-model",
-    }));
-
-    expect(response.statusCode).toBe(400);
-    expect(JSON.parse(response.body)).toEqual({ error: "Invalid chat request" });
-    expect(bedrockClient.converse).not.toHaveBeenCalled();
+    }, ["override-model"]);
   });
 
   it("returns 500 for POST /chat when CHAT_TABLE is missing", async () => {
