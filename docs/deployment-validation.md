@@ -208,6 +208,9 @@ and is not part of those 35 Terraform resources.
 ## What It Does Not Prove
 
 - It does not prove continuous operation after the validation window; resources were destroyed.
+- Post-teardown refinements such as Lambda client reuse, strongly consistent
+  history reads, and API contract tightening were validated through local and CI
+  checks, not through a second live AWS deployment.
 - It does not include WAF, custom domains, frontend UI, RAG, streaming, tool
   calling, file uploads, per-user quota enforcement, or multi-region deployment.
 - It does not provide hard spend enforcement. Budgets and alarms are alerts.

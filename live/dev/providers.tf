@@ -5,10 +5,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.18"
     }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
-    }
   }
 
   # Default state is local so this example can be initialized safely.

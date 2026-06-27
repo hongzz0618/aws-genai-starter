@@ -32,18 +32,6 @@ mock_provider "aws" {
   }
 }
 
-mock_provider "tls" {
-  mock_data "tls_certificate" {
-    defaults = {
-      certificates = [
-        {
-          sha1_fingerprint = "0123456789abcdef0123456789abcdef01234567"
-        }
-      ]
-    }
-  }
-}
-
 override_resource {
   target = module.chat_table.aws_dynamodb_table.this
 

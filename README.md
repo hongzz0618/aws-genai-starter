@@ -174,12 +174,17 @@ Queries use:
 ```text
 user_id = authenticated sub
 begins_with(sk, "SESSION#<base64url-session-id>#")
+ConsistentRead = true
 ScanIndexForward = false
 Limit = history_turns
 ```
 
 The Lambda reverses selected items back to chronological order before Bedrock
 receives them. Invalid stored records are skipped without unbounded backfill.
+
+Strongly consistent reads favor immediate follow-up context correctness after a
+successful write, at the cost of higher read-capacity consumption than
+eventually consistent reads.
 
 The caller-facing `session_id` is deterministically base64url-encoded before it
 is used in the sort key. This prevents delimiter and prefix-boundary confusion
