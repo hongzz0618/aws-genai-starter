@@ -428,15 +428,19 @@ resource "aws_budgets_budget" "monthly" {
 
 # Cost Anomaly Detection
 resource "aws_ce_anomaly_monitor" "service" {
+  count = var.enable_cost_anomaly_detection ? 1 : 0
+
   name              = "${var.project}-${var.environment}-service-anomaly-monitor"
   monitor_type      = "DIMENSIONAL"
   monitor_dimension = "SERVICE"
 }
 
 resource "aws_ce_anomaly_subscription" "service_subscription" {
+  count = var.enable_cost_anomaly_detection ? 1 : 0
+
   name             = "${var.project}-${var.environment}-service-anomaly-sub"
   frequency        = "IMMEDIATE"
-  monitor_arn_list = [aws_ce_anomaly_monitor.service.arn]
+  monitor_arn_list = [aws_ce_anomaly_monitor.service[0].arn]
 
   threshold_expression {
     dimension {
