@@ -86,18 +86,25 @@ export async function handleChat(
       CHAT_REQUEST_LIMITS.maxTokensMin,
       CHAT_REQUEST_LIMITS.maxTokensMax,
     );
+
+    if (payload.temperature !== undefined && payload.top_p !== undefined) {
+      throw new InvalidChatRequestError();
+    }
+
     const temperature = optionalNumberInRange(
       payload.temperature,
       config.temperature,
       CHAT_REQUEST_LIMITS.temperatureMin,
       CHAT_REQUEST_LIMITS.temperatureMax,
     );
-    const topP = optionalNumberInRange(
-      payload.top_p,
-      config.topP,
-      CHAT_REQUEST_LIMITS.topPMin,
-      CHAT_REQUEST_LIMITS.topPMax,
-    );
+    const topP = payload.top_p === undefined
+      ? undefined
+      : optionalNumberInRange(
+        payload.top_p,
+        config.topP,
+        CHAT_REQUEST_LIMITS.topPMin,
+        CHAT_REQUEST_LIMITS.topPMax,
+      );
 
     const repository =
       dependencies.repository ??
@@ -125,8 +132,7 @@ export async function handleChat(
       messages: boundedContext.messages,
       inferenceConfig: {
         maxTokens,
-        temperature,
-        topP,
+        ...(topP === undefined ? { temperature } : { topP }),
       },
     };
 

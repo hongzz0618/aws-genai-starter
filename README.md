@@ -83,6 +83,8 @@ Accepted request fields:
 - `temperature`: optional number from 0 to 1
 - `top_p`: optional number from 0 to 1
 
+`temperature` and `top_p` are mutually exclusive. Supply at most one.
+
 Clients cannot set `model_id` or `user_id`.
 
 Common responses:

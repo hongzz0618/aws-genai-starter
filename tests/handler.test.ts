@@ -313,6 +313,14 @@ describe("handler", () => {
     }
   });
 
+  it("rejects requests with both temperature and top_p before DynamoDB or Bedrock calls", async () => {
+    await expectInvalidBeforeDownstream({
+      prompt: "hello",
+      temperature: 0,
+      top_p: 1,
+    });
+  });
+
   it("returns 400 for invalid field types and decimal integer values", async () => {
     for (const body of [
       { prompt: 123 },
@@ -497,7 +505,6 @@ describe("handler", () => {
       history_turns: 2,
       max_tokens: 99,
       temperature: 0.3,
-      top_p: 0.9,
     });
 
     const response = await createHandler({
@@ -528,9 +535,9 @@ describe("handler", () => {
       inferenceConfig: {
         maxTokens: 99,
         temperature: 0.3,
-        topP: 0.9,
       },
     });
+    expect(bedrockRequests[0]?.inferenceConfig).not.toHaveProperty("topP");
     expect(bedrockRequests[0]?.messages).toEqual([
       { role: "user", content: [{ text: "previous prompt" }] },
       { role: "assistant", content: [{ text: "previous response" }] },
@@ -552,7 +559,81 @@ describe("handler", () => {
     ]);
   });
 
-  it("accepts documented parameter boundaries", async () => {
+  it("uses default temperature and omits topP when sampling parameters are omitted", async () => {
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      generateSessionId: () => "default-sampling-session",
+      nowMs: () => 1710000000001,
+    })(chatEvent({
+      prompt: "hello",
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(bedrockClient.converse).toHaveBeenCalledWith(expect.objectContaining({
+      inferenceConfig: {
+        maxTokens: baseConfig.maxTokens,
+        temperature: baseConfig.temperature,
+      },
+    }));
+    expect(bedrockClient.converse.mock.calls[0]?.[0].inferenceConfig).not.toHaveProperty("topP");
+  });
+
+  it("sends only temperature when temperature is supplied at a boundary", async () => {
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      generateSessionId: () => "temperature-session",
+      nowMs: () => 1710000000001,
+    })(chatEvent({
+      prompt: "hello",
+      temperature: 0,
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(bedrockClient.converse).toHaveBeenCalledWith(expect.objectContaining({
+      inferenceConfig: {
+        maxTokens: baseConfig.maxTokens,
+        temperature: 0,
+      },
+    }));
+    expect(bedrockClient.converse.mock.calls[0]?.[0].inferenceConfig).not.toHaveProperty("topP");
+  });
+
+  it("sends only topP when top_p is supplied at a boundary", async () => {
+    const repository = createMockRepository();
+    const bedrockClient = createMockBedrockClient();
+
+    const response = await createHandler({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      generateSessionId: () => "top-p-session",
+      nowMs: () => 1710000000001,
+    })(chatEvent({
+      prompt: "hello",
+      top_p: 1,
+    }));
+
+    expect(response.statusCode).toBe(200);
+    expect(bedrockClient.converse).toHaveBeenCalledWith(expect.objectContaining({
+      inferenceConfig: {
+        maxTokens: baseConfig.maxTokens,
+        topP: 1,
+      },
+    }));
+    expect(bedrockClient.converse.mock.calls[0]?.[0].inferenceConfig).not.toHaveProperty("temperature");
+  });
+
+  it("accepts documented non-sampling parameter boundaries", async () => {
     const historyLimits: number[] = [];
     const repository: ChatRepository = {
       async queryHistoryTurns(_userId, _sessionId, limit) {
@@ -592,13 +673,11 @@ describe("handler", () => {
       history_turns: 0,
       max_tokens: 1,
       temperature: 0,
-      top_p: 0,
     }));
     const upperResponse = await handler(chatEvent({
       prompt: "x".repeat(8000),
       history_turns: 20,
       max_tokens: 4096,
-      temperature: 1,
       top_p: 1,
     }));
 
@@ -608,11 +687,9 @@ describe("handler", () => {
     expect(bedrockRequests[0]?.inferenceConfig).toEqual({
       maxTokens: 1,
       temperature: 0,
-      topP: 0,
     });
     expect(bedrockRequests[1]?.inferenceConfig).toEqual({
       maxTokens: 4096,
-      temperature: 1,
       topP: 1,
     });
   });

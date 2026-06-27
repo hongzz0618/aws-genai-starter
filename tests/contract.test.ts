@@ -43,8 +43,10 @@ interface Operation {
 interface JsonSchema {
   $ref?: string;
   type?: string;
+  description?: string;
   const?: unknown;
   required?: string[];
+  not?: JsonSchema;
   additionalProperties?: boolean | JsonSchema;
   properties?: Record<string, JsonSchema>;
   minLength?: number;
@@ -189,6 +191,17 @@ describe("OpenAPI contract", () => {
     expect(Object.keys(requestSchema.properties ?? {}).sort()).toEqual(
       [...CHAT_REQUEST_ALLOWED_FIELDS].sort(),
     );
+  });
+
+  it("documents temperature and top_p as mutually exclusive", () => {
+    const requestSchema = resolveSchema(
+      openApi.paths["/chat"].post.requestBody?.content["application/json"].schema ?? {},
+    );
+
+    expect(requestSchema.description).toContain(
+      "temperature and top_p are mutually exclusive. Supply at most one.",
+    );
+    expect(requestSchema.not?.required).toEqual(["temperature", "top_p"]);
   });
 
   it("documents expected chat error statuses", () => {

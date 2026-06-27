@@ -27,8 +27,11 @@ components:
           const: aws-genai-starter
     ChatRequest:
       type: object
+      description: temperature and top_p are mutually exclusive. Supply at most one.
       required: [prompt]
       additionalProperties: false
+      not:
+        required: [temperature, top_p]
       properties:
         prompt:
           type: string
