@@ -4,7 +4,7 @@ info:
   version: 0.2.0
   description: Authenticated serverless GenAI chat API reference.
 servers:
-  - url: https://example.execute-api.us-east-1.amazonaws.com
+  - url: https://example.execute-api.eu-west-1.amazonaws.com
     description: Placeholder deployed API URL
 components:
   securitySchemes:

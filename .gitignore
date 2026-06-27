@@ -2,7 +2,14 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.tfplan
+tfplan
 .terraform/
+
+# Environment files
+.env
+.env.*
+!.env.example
 
 # AWS credentials
 *.pem
