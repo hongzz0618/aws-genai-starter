@@ -10,7 +10,6 @@ export interface AppConfig {
   retentionDays: number;
   maxTokens: number;
   temperature: number;
-  topP: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -24,7 +23,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     retentionDays: parseIntegerInRange(env.CHAT_RETENTION_DAYS, 7, 1, 365),
     maxTokens: parseIntegerInRange(env.MAX_TOKENS, 1024, 1, 4096),
     temperature: parseNumberInRange(env.TEMPERATURE, 0.2, 0, 1),
-    topP: parseNumberInRange(env.TOP_P, 1, 0, 1),
   };
 }
 

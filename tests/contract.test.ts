@@ -49,6 +49,7 @@ interface JsonSchema {
   not?: JsonSchema;
   additionalProperties?: boolean | JsonSchema;
   properties?: Record<string, JsonSchema>;
+  pattern?: string;
   minLength?: number;
   maxLength?: number;
   minimum?: number;
@@ -174,12 +175,19 @@ describe("OpenAPI contract", () => {
     const properties = requestSchema.properties ?? {};
 
     expect(properties.prompt.maxLength).toBe(CHAT_REQUEST_LIMITS.promptMaxLength);
+    expect(properties.prompt.pattern).toBe("\\S");
+    expect(properties.prompt.description).toContain("trimmed before validation");
+    expect(properties.prompt.description).toContain("non-whitespace");
     expect(properties.session_id.maxLength).toBe(CHAT_REQUEST_LIMITS.sessionIdMaxLength);
     expect(properties.system_prompt.maxLength).toBe(CHAT_REQUEST_LIMITS.systemPromptMaxLength);
     expect(properties.history_turns.minimum).toBe(CHAT_REQUEST_LIMITS.historyTurnsMin);
     expect(properties.history_turns.maximum).toBe(CHAT_REQUEST_LIMITS.historyTurnsMax);
     expect(properties.max_tokens.minimum).toBe(CHAT_REQUEST_LIMITS.maxTokensMin);
     expect(properties.max_tokens.maximum).toBe(CHAT_REQUEST_LIMITS.maxTokensMax);
+    expect(properties.temperature.minimum).toBe(CHAT_REQUEST_LIMITS.temperatureMin);
+    expect(properties.temperature.maximum).toBe(CHAT_REQUEST_LIMITS.temperatureMax);
+    expect(properties.top_p.minimum).toBe(CHAT_REQUEST_LIMITS.topPMin);
+    expect(properties.top_p.maximum).toBe(CHAT_REQUEST_LIMITS.topPMax);
   });
 
   it("keeps ChatRequest fields aligned with the runtime allowlist", () => {
@@ -232,7 +240,6 @@ describe("OpenAPI contract", () => {
       retentionDays: 7,
       maxTokens: 1024,
       temperature: 0.2,
-      topP: 1,
     } })({
       rawPath: "/chat",
       body: JSON.stringify({ prompt: "hello" }),

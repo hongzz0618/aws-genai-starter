@@ -35,8 +35,10 @@ components:
       properties:
         prompt:
           type: string
+          description: Leading and trailing whitespace is trimmed before validation; the prompt must contain at least one non-whitespace character.
           minLength: 1
           maxLength: 8000
+          pattern: '\S'
         session_id:
           type: string
           maxLength: 128

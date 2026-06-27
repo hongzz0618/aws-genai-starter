@@ -29,11 +29,6 @@ export interface HealthResponseBody {
   service: string;
 }
 
-export interface ErrorResponseBody {
-  error: string;
-  detail?: string;
-}
-
 export interface ChatRequestBody {
   prompt?: unknown;
   session_id?: unknown;

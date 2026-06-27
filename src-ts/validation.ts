@@ -130,6 +130,14 @@ export function optionalNumberInRange(
     return fallback;
   }
 
+  return numberInRange(value, min, max);
+}
+
+export function numberInRange(
+  value: unknown,
+  min: number,
+  max: number,
+): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
     throw new InvalidChatRequestError();
   }

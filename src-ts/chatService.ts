@@ -28,6 +28,7 @@ import {
   CHAT_REQUEST_LIMITS,
   INVALID_CHAT_REQUEST_ERROR,
   InvalidChatRequestError,
+  numberInRange,
   optionalIntegerInRange,
   optionalNumberInRange,
   parseJsonBody,
@@ -99,9 +100,8 @@ export async function handleChat(
     );
     const topP = payload.top_p === undefined
       ? undefined
-      : optionalNumberInRange(
+      : numberInRange(
         payload.top_p,
-        config.topP,
         CHAT_REQUEST_LIMITS.topPMin,
         CHAT_REQUEST_LIMITS.topPMax,
       );

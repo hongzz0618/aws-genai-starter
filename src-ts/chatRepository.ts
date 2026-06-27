@@ -53,6 +53,7 @@ export class DynamoDbChatRepository implements ChatRepository {
           ":user_id": userId,
           ":session_prefix": sessionPrefix,
         },
+        ConsistentRead: true,
         ScanIndexForward: false,
         Limit: limit,
       }),

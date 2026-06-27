@@ -76,6 +76,7 @@ describe("DynamoDbChatRepository", () => {
         ":user_id": "user-a",
         ":session_prefix": "SESSION#c2Vzc2lvbi0x#",
       },
+      ConsistentRead: true,
       ScanIndexForward: false,
       Limit: 2,
     });

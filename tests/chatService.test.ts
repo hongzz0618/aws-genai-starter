@@ -131,8 +131,5 @@ describe("loadConfig retention and context settings", () => {
     expect(() => loadConfig({ TEMPERATURE: "1.1" })).toThrow(
       "Invalid numeric config value",
     );
-    expect(() => loadConfig({ TOP_P: "-0.1" })).toThrow(
-      "Invalid numeric config value",
-    );
   });
 });

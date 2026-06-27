@@ -1,6 +1,6 @@
 import type { ConverseCommandInput, ConverseCommandOutput } from "@aws-sdk/client-bedrock-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createHandler } from "../src-ts/handler";
+import { createCachedChatDependenciesFactory, createHandler } from "../src-ts/handler";
 import type { ChatRepository } from "../src-ts/chatRepository";
 import type { ChatTurnItem, HttpEvent } from "../src-ts/types";
 import { CHAT_REQUEST_LIMITS } from "../src-ts/validation";
@@ -15,7 +15,6 @@ const baseConfig = {
   retentionDays: 7,
   maxTokens: 1024,
   temperature: 0.2,
-  topP: 1,
 };
 
 function chatEvent(body: string | object, sub = "user-a"): HttpEvent {
@@ -137,6 +136,89 @@ describe("handler", () => {
     });
 
     expect(response.statusCode).toBe(200);
+  });
+
+  it("does not initialize default chat dependencies for GET /health", async () => {
+    const createDefaultDependencies = vi.fn(() => {
+      throw new Error("chat dependencies should not be created");
+    });
+
+    const response = await createHandler(
+      {},
+      createCachedChatDependenciesFactory(createDefaultDependencies),
+    )({
+      rawPath: "/health",
+      requestContext: { http: { method: "GET" } },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(createDefaultDependencies).not.toHaveBeenCalled();
+  });
+
+  it("reuses cached default chat dependencies without caching request data", async () => {
+    const savedItems: ChatTurnItem[] = [];
+    const repository: ChatRepository = {
+      async queryHistoryTurns(_userId, sessionId) {
+        return [
+          { prompt: `history prompt ${sessionId}`, response: `history response ${sessionId}` },
+        ];
+      },
+      async saveTurn(item) {
+        savedItems.push(item);
+      },
+    };
+    const bedrockRequests: ConverseCommandInput[] = [];
+    const bedrockClient = {
+      async converse(input: ConverseCommandInput): Promise<ConverseCommandOutput> {
+        bedrockRequests.push(input);
+        return {
+          output: {
+            message: {
+              role: "assistant",
+              content: [{ text: `response ${bedrockRequests.length}` }],
+            },
+          },
+          $metadata: {},
+        };
+      },
+    };
+    const createDefaultDependencies = vi.fn(() => ({
+      config: baseConfig,
+      repository,
+      bedrockClient,
+      generateTurnId: () => `turn-${savedItems.length + 1}`,
+      nowMs: () => 1710000000000 + savedItems.length,
+    }));
+    const handler = createHandler(
+      {},
+      createCachedChatDependenciesFactory(createDefaultDependencies),
+    );
+
+    const firstResponse = await handler(chatEvent({
+      prompt: "first prompt",
+      session_id: "session-a",
+    }));
+    const secondResponse = await handler(chatEvent({
+      prompt: "second prompt",
+      session_id: "session-b",
+    }));
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(secondResponse.statusCode).toBe(200);
+    expect(createDefaultDependencies).toHaveBeenCalledOnce();
+    expect(bedrockRequests).toHaveLength(2);
+    expect(bedrockRequests[0]?.messages).toEqual([
+      { role: "user", content: [{ text: "history prompt session-a" }] },
+      { role: "assistant", content: [{ text: "history response session-a" }] },
+      { role: "user", content: [{ text: "first prompt" }] },
+    ]);
+    expect(bedrockRequests[1]?.messages).toEqual([
+      { role: "user", content: [{ text: "history prompt session-b" }] },
+      { role: "assistant", content: [{ text: "history response session-b" }] },
+      { role: "user", content: [{ text: "second prompt" }] },
+    ]);
+    expect(savedItems.map((item) => item.session_id)).toEqual(["session-a", "session-b"]);
+    expect(savedItems.map((item) => item.prompt)).toEqual(["first prompt", "second prompt"]);
   });
 
   it("returns 404 for unknown routes", async () => {
