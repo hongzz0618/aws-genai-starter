@@ -91,3 +91,9 @@ variable "apigw_latency_p95_threshold_ms" {
   type        = number
   default     = 1500
 }
+
+variable "enable_cost_anomaly_detection" {
+  description = "Whether to create a Cost Anomaly Detection monitor and subscription."
+  type        = bool
+  default     = false
+}

@@ -142,6 +142,7 @@ module "observability" {
   alarm_email = var.alarm_email
 
   monthly_budget_amount            = 25
+  enable_cost_anomaly_detection    = false
   currency                         = "USD"
   lambda_duration_p95_threshold_ms = 2000
   apigw_latency_p95_threshold_ms   = 1500
