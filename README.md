@@ -98,6 +98,46 @@ Common responses:
 
 OpenAPI documentation is in `openapi/openapi.yaml`.
 
+## Live AWS Validation
+
+The dev environment was deployed and validated in `eu-west-1`, then destroyed after the validation window. Terraform managed 35 project resources; the final reconciliation apply completed with `0 added, 0 changed, 0 destroyed`, which confirmed deployed state alignment rather than first-time creation. The validation covered the public health route, JWT-protected chat route, Cognito-authorized Bedrock invocation, DynamoDB conversation restoration, TTL, structured logs, EMF metrics, and teardown checks. Screenshots are sanitized and do not expose account IDs, API URLs, Cognito IDs, JWTs, IAM ARNs, Marketplace offer IDs, or agreement IDs.
+
+| Area | Validation | Result |
+| --- | --- | --- |
+| Infrastructure | Terraform reconciliation | Passed |
+| Authorization | Missing JWT rejected | Passed |
+| Model invocation | Authenticated Bedrock response | Passed |
+| Persistence | User/session history and TTL | Passed |
+| Observability | Structured logs and EMF metrics | Passed |
+| Teardown | 35 resources destroyed | Passed |
+
+Deployment findings:
+
+- Cost Anomaly Detection service monitors are account-level resources. The tested account already had a default service monitor, so the project made that monitor optional and keeps it disabled in `live/dev` while retaining budgets, alarms, and other cost visibility resources.
+- Claude Haiku 4.5 rejected requests that included both `temperature` and `topP`. The API now treats `temperature` and `top_p` as mutually exclusive, returns HTTP 400 for conflicts before DynamoDB or Bedrock calls, and sends only one sampling field to Bedrock.
+
+Detailed evidence and limitations are documented in [docs/deployment-validation.md](docs/deployment-validation.md).
+
+![API Gateway routes showing public health and JWT-protected chat](docs/evidence/02-api-gateway-routes.png)
+
+Route-level authorization: `GET /health` is public and `POST /chat` uses a JWT authorizer.
+
+![Authenticated Bedrock chat returning HTTP 200](docs/evidence/05-authenticated-bedrock-chat.png)
+
+Authenticated path through Cognito, API Gateway, Lambda, and Bedrock returned HTTP 200 using Claude Haiku 4.5.
+
+![Conversation history restored for a reused session](docs/evidence/06-conversation-history.png)
+
+A reused authenticated session restored prior history and answered the follow-up with the earlier subject.
+
+![CloudWatch custom metrics summary](docs/evidence/09-cloudwatch-custom-metrics.png)
+
+CloudWatch received EMF metrics; the two failures shown came from controlled validation before the sampling-parameter fix.
+
+![Terraform destroy validation showing no managed resources remaining](docs/evidence/10-terraform-destroy-validation.png)
+
+Teardown destroyed 35 Terraform-managed resources and left no managed resources in state.
+
 ## DynamoDB Design
 
 The reference schema is intentionally user-scoped:
@@ -216,6 +256,9 @@ CI runs these checks without AWS credentials or deployment.
 - `src-ts/`: Lambda TypeScript source
 - `tests/`: unit, infrastructure static, and API contract tests
 - `openapi/openapi.yaml`: documented API contract
+- `docs/deployment-validation.md`: sanitized live AWS validation evidence and findings
+- `docs/evidence/`: sanitized validation screenshots
+- `docs/adr/`: architecture decision records
 - `modules/`: reusable Terraform modules
 - `live/dev/`: local-validating dev Terraform root
 - `live/dev/tests/plan_contracts.tftest.hcl`: native Terraform plan contract tests
@@ -225,11 +268,10 @@ CI runs these checks without AWS credentials or deployment.
 
 ## Boundaries and Limitations
 
-- No real AWS deployment evidence is included.
+- The live AWS evidence is a time-bounded dev environment validation, not proof of a continuously running environment.
+- The validated resources were destroyed after testing.
 - The Cognito app client keeps SRP enabled; `ALLOW_ADMIN_USER_PASSWORD_AUTH` is only for IAM-authenticated CLI deployment validation and does not mean public clients should use administrator authentication APIs.
-- Cognito sign-in and JWT authorizer behavior still need deployed AWS runtime validation.
-- Bedrock account access, Region support, and model entitlement still need live validation.
-- CloudWatch metric ingestion, access log delivery, and alarms still need deployed validation.
+- AWS Marketplace and Anthropic model access are account-level external prerequisites and are not Terraform-managed project resources.
 - Cost controls are alerts and bounded request inputs, not hard spend enforcement.
 - DynamoDB TTL is asynchronous.
 - The API does not include RAG, vector storage, streaming, frontend UI, file uploads, tool calling, per-user quota enforcement, WAF, custom domains, multi-region deployment, or automatic deployment.
