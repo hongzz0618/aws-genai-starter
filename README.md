@@ -224,6 +224,7 @@ CI runs these checks without AWS credentials or deployment.
 ## Boundaries and Limitations
 
 - No real AWS deployment evidence is included.
+- The Cognito app client keeps SRP enabled; `ALLOW_ADMIN_USER_PASSWORD_AUTH` is only for IAM-authenticated CLI deployment validation and does not mean public clients should use administrator authentication APIs.
 - Cognito sign-in and JWT authorizer behavior still need deployed AWS runtime validation.
 - Bedrock account access, Region support, and model entitlement still need live validation.
 - CloudWatch metric ingestion, access log delivery, and alarms still need deployed validation.

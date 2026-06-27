@@ -16,7 +16,7 @@ export interface AppConfig {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     chatTable: env.CHAT_TABLE,
-    awsRegion: env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "us-east-1",
+    awsRegion: env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "eu-west-1",
     environment: nonBlank(env.ENVIRONMENT, "dev"),
     modelId: env.MODEL_ID ?? "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
     historyTurns: parseIntegerInRange(env.HISTORY_TURNS, 10, 0, 20),

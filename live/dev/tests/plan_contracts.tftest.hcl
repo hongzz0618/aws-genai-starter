@@ -92,6 +92,20 @@ run "cognito_contract" {
   }
 
   assert {
+    condition = toset(aws_cognito_user_pool_client.this.explicit_auth_flows) == toset([
+      "ALLOW_ADMIN_USER_PASSWORD_AUTH",
+      "ALLOW_REFRESH_TOKEN_AUTH",
+      "ALLOW_USER_SRP_AUTH"
+    ])
+    error_message = "The Cognito app client auth flows must keep SRP, refresh tokens, and IAM-controlled admin password validation only."
+  }
+
+  assert {
+    condition     = aws_cognito_user_pool_client.this.prevent_user_existence_errors == "ENABLED"
+    error_message = "The Cognito app client must keep user existence errors hidden."
+  }
+
+  assert {
     condition = (
       aws_cognito_user_pool.this.password_policy[0].minimum_length == 12 &&
       aws_cognito_user_pool.this.password_policy[0].require_lowercase == true &&

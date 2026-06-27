@@ -91,6 +91,21 @@ describe("loadConfig retention and context settings", () => {
     expect(loadConfig({}).retentionDays).toBe(7);
   });
 
+  it("uses eu-west-1 when no AWS Region environment variables are provided", () => {
+    expect(loadConfig({}).awsRegion).toBe("eu-west-1");
+  });
+
+  it("prefers AWS_REGION over AWS_DEFAULT_REGION", () => {
+    expect(loadConfig({
+      AWS_REGION: "eu-central-1",
+      AWS_DEFAULT_REGION: "eu-west-1",
+    }).awsRegion).toBe("eu-central-1");
+  });
+
+  it("uses AWS_DEFAULT_REGION when AWS_REGION is not provided", () => {
+    expect(loadConfig({ AWS_DEFAULT_REGION: "eu-west-3" }).awsRegion).toBe("eu-west-3");
+  });
+
   it("fails fast for invalid retention configuration", () => {
     expect(() => loadConfig({ CHAT_RETENTION_DAYS: "0" })).toThrow(
       "Invalid integer config value",
