@@ -40,7 +40,7 @@ describe("terraform Bedrock IAM configuration", () => {
     expect(liveMain).toContain("bedrock_foundation_model_arns");
     expect(liveMain).toContain("bedrock_inference_profile_arns");
     expect(liveMain).toMatch(/MODEL_ID\s*=\s*local\.bedrock_model_id/);
-    expect(liveVariables).toContain('default     = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"');
+    expect(liveVariables).toContain('default     = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"');
   });
 });
 

@@ -18,7 +18,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     chatTable: env.CHAT_TABLE,
     awsRegion: env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "us-east-1",
     environment: nonBlank(env.ENVIRONMENT, "dev"),
-    modelId: env.MODEL_ID ?? "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+    modelId: env.MODEL_ID ?? "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
     historyTurns: parseIntegerInRange(env.HISTORY_TURNS, 10, 0, 20),
     maxContextChars: parseIntegerInRange(env.MAX_CONTEXT_CHARS, 24000, 1, 200000),
     retentionDays: parseIntegerInRange(env.CHAT_RETENTION_DAYS, 7, 1, 365),

@@ -53,7 +53,7 @@ override_resource {
 }
 
 variables {
-  region = "us-east-1"
+  region = "eu-west-1"
 }
 
 run "root_lambda_dynamodb_policy_contract" {
@@ -218,12 +218,15 @@ run "lambda_iam_bedrock_contract" {
     name           = "aws-genai-starter-dev-lambda"
     enable_bedrock = true
     bedrock_inference_profile_arns = [
-      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+      "arn:aws:bedrock:eu-west-1:123456789012:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
     ]
     bedrock_foundation_model_arns = [
-      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
-      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
-      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0"
+      "arn:aws:bedrock:eu-north-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:eu-west-3::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:eu-south-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:eu-south-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
     ]
   }
 
@@ -246,7 +249,7 @@ run "lambda_iam_bedrock_contract" {
   assert {
     condition = (
       jsondecode(aws_iam_policy.bedrock_invoke[0].policy).Statement[1].Condition.StringLike["bedrock:InferenceProfileArn"] ==
-      ["arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0"]
+      ["arn:aws:bedrock:eu-west-1:123456789012:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"]
     )
     error_message = "Foundation model access must be constrained by the configured inference profile ARN."
   }

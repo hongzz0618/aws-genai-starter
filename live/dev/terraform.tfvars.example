@@ -3,9 +3,18 @@
 # - bedrock_model_id is passed to the Lambda MODEL_ID environment variable.
 # - bedrock_foundation_model_id and destination regions build the allowed foundation-model ARNs.
 #
-# bedrock_model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
-# bedrock_foundation_model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
-# bedrock_inference_profile_destination_regions = ["us-east-1", "us-east-2", "us-west-2"]
+# region = "eu-west-1"
+#
+# bedrock_model_id = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+# bedrock_foundation_model_id = "anthropic.claude-haiku-4-5-20251001-v1:0"
+# bedrock_inference_profile_destination_regions = [
+#   "eu-north-1",
+#   "eu-west-3",
+#   "eu-south-1",
+#   "eu-south-2",
+#   "eu-west-1",
+#   "eu-central-1"
+# ]
 #
 # chat_retention_days = 7
 # max_context_chars = 24000
