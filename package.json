@@ -1,5 +1,5 @@
 {
-  "name": "aws-genai-starter",
+  "name": "aws-bedrock-chat-backend",
   "version": "0.1.0",
   "private": true,
   "description": "Authenticated TypeScript GenAI backend on AWS with Cognito, API Gateway JWT authorization, Amazon Bedrock, user-scoped DynamoDB history, Terraform, and observability.",

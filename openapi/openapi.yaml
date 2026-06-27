@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: AWS GenAI Starter API
+  title: AWS Bedrock Chat Backend API
   version: 0.2.0
   description: Authenticated serverless GenAI chat API reference.
 servers:
