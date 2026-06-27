@@ -2,9 +2,14 @@
 
 ## Scope
 
-This document records a sanitized live validation of the dev environment for the authenticated serverless chat path. It covers Terraform reconciliation, route authorization, health and chat behavior, Bedrock invocation, DynamoDB history persistence, CloudWatch logs and metrics, deployment findings, and teardown.
+This document records a sanitized live validation of the dev environment for the
+authenticated serverless chat path. It covers Terraform reconciliation, route
+authorization, health and chat behavior, Bedrock invocation, DynamoDB history
+persistence, CloudWatch logs and metrics, deployment findings, and teardown.
 
-The screenshots in `docs/evidence/` are redacted. They do not disclose AWS account IDs, API URLs, Cognito IDs, JWTs, IAM ARNs, Marketplace offer IDs, or agreement IDs.
+The screenshots in `docs/evidence/` are redacted. They do not disclose AWS
+account IDs, API URLs, Cognito IDs, JWTs, IAM ARNs, Marketplace offer IDs, or
+agreement IDs.
 
 ## Environment
 
@@ -35,7 +40,9 @@ Anthropic model access is an account-level prerequisite. It is not one of the Te
 
 Validation target: confirm that the deployed Terraform state was reconciled after the live environment was created.
 
-Actual result: Terraform reported `0 added, 0 changed, 0 destroyed` and 35 managed AWS project resources. This is reconciliation evidence after deployment; it is not first-time creation evidence.
+Actual result: Terraform reported `0 added, 0 changed, 0 destroyed` and 35
+managed AWS project resources. This is reconciliation evidence after deployment;
+it is not first-time creation evidence.
 
 This proves the Terraform configuration and deployed dev resources were aligned at the end of the validation run.
 
@@ -75,7 +82,9 @@ This proves the deployed route rejects missing credentials before allowing chat 
 
 Validation target: confirm the full authenticated model invocation path.
 
-Actual result: a valid Cognito JWT was accepted by the API Gateway authorizer, the TypeScript Lambda called Amazon Bedrock Converse, and Claude Haiku 4.5 returned HTTP 200 through the API.
+Actual result: a valid Cognito JWT was accepted by the API Gateway authorizer,
+the TypeScript Lambda called Amazon Bedrock Converse, and Claude Haiku 4.5
+returned HTTP 200 through the API.
 
 Validated path:
 
@@ -88,15 +97,19 @@ Cognito JWT
 -> HTTP 200
 ```
 
-This proves the runtime IAM, model entitlement, authorizer, Lambda handler, and response mapping worked together for the configured inference profile.
+This proves the runtime IAM, model entitlement, authorizer, Lambda handler, and
+response mapping worked together for the configured inference profile.
 
 ![Authenticated Bedrock chat returning HTTP 200 and usage metadata](evidence/05-authenticated-bedrock-chat.png)
 
 ## Conversation History Restoration
 
-Validation target: confirm that an authenticated user can reuse the same `session_id` and receive history-aware behavior.
+Validation target: confirm that an authenticated user can reuse the same
+`session_id` and receive history-aware behavior.
 
-Actual result: the second request reused the same session, Lambda restored the previous turn from DynamoDB, and the model answered that the prior topic was `AWS Lambda`.
+Actual result: the second request reused the same session, Lambda restored the
+previous turn from DynamoDB, and the model answered that the prior topic was
+`AWS Lambda`.
 
 This proves the deployed runtime queried user/session-scoped history before calling Bedrock.
 
@@ -106,7 +119,9 @@ This proves the deployed runtime queried user/session-scoped history before call
 
 Validation target: confirm the table stores chat turns with retention and usage metadata.
 
-Actual result: DynamoDB TTL was `ENABLED` on `expires_at`. The validated session stored two turns with model ID, input tokens, output tokens, and TTL presence. The user ID and complete sort key were hidden in the screenshot.
+Actual result: DynamoDB TTL was `ENABLED` on `expires_at`. The validated session
+stored two turns with model ID, input tokens, output tokens, and TTL presence.
+The user ID and complete sort key were hidden in the screenshot.
 
 This proves the persistence model writes conversation turns with lifecycle metadata and Bedrock usage fields.
 
@@ -116,7 +131,9 @@ This proves the persistence model writes conversation turns with lifecycle metad
 
 Validation target: confirm successful chat requests emit structured logs without prompt or token disclosure.
 
-Actual result: CloudWatch Logs received a `chat_request_succeeded` JSON event with total latency, Bedrock latency, history turn count, model ID, environment, and context truncation status.
+Actual result: CloudWatch Logs received a `chat_request_succeeded` JSON event
+with total latency, Bedrock latency, history turn count, model ID, environment,
+and context truncation status.
 
 This proves the deployed Lambda emits machine-readable operational metadata for successful chat requests.
 
@@ -126,7 +143,10 @@ This proves the deployed Lambda emits machine-readable operational metadata for 
 
 Validation target: confirm CloudWatch receives application EMF metrics.
 
-Actual result: the `AwsGenAiStarter` namespace showed request, success, failure, latency, and token metrics. The screenshot shows `chat_requests: 4`, `chat_successes: 2`, and `chat_failures: 2`; the two failures were controlled validation failures produced before the Bedrock sampling-parameter fix.
+Actual result: the `AwsGenAiStarter` namespace showed request, success, failure,
+latency, and token metrics. The screenshot shows `chat_requests: 4`,
+`chat_successes: 2`, and `chat_failures: 2`; the two failures were controlled
+validation failures produced before the Bedrock sampling-parameter fix.
 
 This proves EMF metric ingestion worked. It does not mean the final code path has a 50 percent failure rate.
 
@@ -136,17 +156,28 @@ This proves EMF metric ingestion worked. It does not mean the final code path ha
 
 ### Account-level Cost Anomaly Detection monitor
 
-Finding: the first apply attempted to create a Cost Anomaly Detection dimensional service monitor, but the AWS account already had the default service monitor.
+Finding: the first apply attempted to create a Cost Anomaly Detection dimensional
+service monitor, but the AWS account already had the default service monitor.
 
-Actual result: AWS rejected the duplicate account-level service monitor. Core API, Lambda, DynamoDB, Cognito, Bedrock IAM, and CloudWatch resources were not the cause of this conflict.
+Actual result: AWS rejected the duplicate account-level service monitor. Core
+API, Lambda, DynamoDB, Cognito, Bedrock IAM, and CloudWatch resources were not
+the cause of this conflict.
 
-Fix: Cost Anomaly Detection monitor creation is now optional, defaults to disabled, and is explicitly disabled in `live/dev`. AWS Budget, CloudWatch alarms, dashboard, and other cost visibility resources remain in the observability module.
+Fix: Cost Anomaly Detection monitor creation is now optional, defaults to
+disabled, and is explicitly disabled in `live/dev`. AWS Budget, CloudWatch
+alarms, dashboard, and other cost visibility resources remain in the
+observability module.
 
 ### Claude sampling parameter compatibility
 
-Finding: a live Bedrock call showed that this Claude Haiku 4.5 path rejects requests where `temperature` and `top_p` are both specified.
+Finding: a live Bedrock call showed that this Claude Haiku 4.5 path rejects
+requests where `temperature` and `top_p` are both specified.
 
-Actual result: the API now treats those fields as mutually exclusive. Requests with both fields return HTTP 400 before DynamoDB or Bedrock is called. Requests with only `temperature` send only `temperature`; requests with only `top_p` send only `topP`; requests with neither send only the configured default `temperature`.
+Actual result: the API now treats those fields as mutually exclusive. Requests
+with both fields return HTTP 400 before DynamoDB or Bedrock is called. Requests
+with only `temperature` send only `temperature`; requests with only `top_p` send
+only `topP`; requests with neither send only the configured default
+`temperature`.
 
 Fix: the API contract, runtime validation, and tests were aligned with this model compatibility boundary.
 
@@ -154,9 +185,13 @@ Fix: the API contract, runtime validation, and tests were aligned with this mode
 
 Validation target: confirm project resources can be safely destroyed after validation.
 
-Actual result: Terraform destroyed 35 managed resources, Terraform state reported 0 managed resources remaining, and follow-up checks found no Lambda function, DynamoDB table, or project GitHub OIDC role.
+Actual result: Terraform destroyed 35 managed resources, Terraform state
+reported 0 managed resources remaining, and follow-up checks found no Lambda
+function, DynamoDB table, or project GitHub OIDC role.
 
-This proves the Terraform-managed project resources were removed after the dev validation. The Anthropic model access agreement is account-level external state and is not part of those 35 Terraform resources.
+This proves the Terraform-managed project resources were removed after the dev
+validation. The Anthropic model access agreement is account-level external state
+and is not part of those 35 Terraform resources.
 
 ![Terraform destruction validation showing 35 destroyed resources and zero remaining state resources](evidence/10-terraform-destroy-validation.png)
 
@@ -173,9 +208,12 @@ This proves the Terraform-managed project resources were removed after the dev v
 ## What It Does Not Prove
 
 - It does not prove continuous operation after the validation window; resources were destroyed.
-- It does not include WAF, custom domains, frontend UI, RAG, streaming, tool calling, file uploads, per-user quota enforcement, or multi-region deployment.
+- It does not include WAF, custom domains, frontend UI, RAG, streaming, tool
+  calling, file uploads, per-user quota enforcement, or multi-region deployment.
 - It does not provide hard spend enforcement. Budgets and alarms are alerts.
 - It does not make DynamoDB TTL a real-time deletion mechanism.
 - It does not add an automated deployment workflow.
 - It does not manage AWS Marketplace or Anthropic model access agreements.
-- It does not replace environment-specific Cognito user lifecycle and sign-in policy decisions. The administrator CLI flow was used only for controlled deployment validation.
+- It does not replace environment-specific Cognito user lifecycle and sign-in
+  policy decisions. The administrator CLI flow was used only for controlled
+  deployment validation.

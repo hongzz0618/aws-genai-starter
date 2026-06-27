@@ -4,13 +4,20 @@
 
 Authenticated serverless GenAI chat API reference on AWS.
 
-The project demonstrates a compact backend path with Cognito authentication, API Gateway JWT authorization, a TypeScript Lambda, Amazon Bedrock Converse, user-scoped DynamoDB chat history, bounded context, retention, structured telemetry, and Terraform validation.
+The project demonstrates a compact backend path with Cognito authentication, API
+Gateway JWT authorization, a TypeScript Lambda, Amazon Bedrock Converse,
+user-scoped DynamoDB chat history, bounded context, retention, structured
+telemetry, and Terraform validation.
 
-It is a learning-oriented reference for backend and infrastructure design. It is not intended to be deployed unchanged as a public service.
+It is a learning-oriented reference for backend and infrastructure design. It is
+not intended to be deployed unchanged as a public service.
 
 ## Use Case
 
-The API supports authenticated chat requests where each caller can maintain named chat sessions. Session IDs are caller-local conversation identifiers, not global authorization boundaries. A user can reuse `demo-session` without seeing another user's history for the same session ID.
+The API supports authenticated chat requests where each caller can maintain named
+chat sessions. Session IDs are caller-local conversation identifiers, not global
+authorization boundaries. A user can reuse `demo-session` without seeing another
+user's history for the same session ID.
 
 ## Architecture
 
@@ -100,7 +107,15 @@ OpenAPI documentation is in `openapi/openapi.yaml`.
 
 ## Live AWS Validation
 
-The dev environment was deployed and validated in `eu-west-1`, then destroyed after the validation window. Terraform managed 35 project resources; the final reconciliation apply completed with `0 added, 0 changed, 0 destroyed`, which confirmed deployed state alignment rather than first-time creation. The validation covered the public health route, JWT-protected chat route, Cognito-authorized Bedrock invocation, DynamoDB conversation restoration, TTL, structured logs, EMF metrics, and teardown checks. Screenshots are sanitized and do not expose account IDs, API URLs, Cognito IDs, JWTs, IAM ARNs, Marketplace offer IDs, or agreement IDs.
+The dev environment was deployed and validated in `eu-west-1`, then destroyed
+after the validation window. Terraform managed 35 project resources; the final
+reconciliation apply completed with `0 added, 0 changed, 0 destroyed`, which
+confirmed deployed state alignment rather than first-time creation. The
+validation covered the public health route, JWT-protected chat route,
+Cognito-authorized Bedrock invocation, DynamoDB conversation restoration, TTL,
+structured logs, EMF metrics, and teardown checks. Screenshots are sanitized and
+do not expose account IDs, API URLs, Cognito IDs, JWTs, IAM ARNs, Marketplace
+offer IDs, or agreement IDs.
 
 | Area | Validation | Result |
 | --- | --- | --- |
@@ -113,8 +128,14 @@ The dev environment was deployed and validated in `eu-west-1`, then destroyed af
 
 Deployment findings:
 
-- Cost Anomaly Detection service monitors are account-level resources. The tested account already had a default service monitor, so the project made that monitor optional and keeps it disabled in `live/dev` while retaining budgets, alarms, and other cost visibility resources.
-- Claude Haiku 4.5 rejected requests that included both `temperature` and `topP`. The API now treats `temperature` and `top_p` as mutually exclusive, returns HTTP 400 for conflicts before DynamoDB or Bedrock calls, and sends only one sampling field to Bedrock.
+- Cost Anomaly Detection service monitors are account-level resources. The tested
+  account already had a default service monitor, so the project made that monitor
+  optional and keeps it disabled in `live/dev` while retaining budgets, alarms,
+  and other cost visibility resources.
+- Claude Haiku 4.5 rejected requests that included both `temperature` and
+  `topP`. The API now treats `temperature` and `top_p` as mutually exclusive,
+  returns HTTP 400 for conflicts before DynamoDB or Bedrock calls, and sends only
+  one sampling field to Bedrock.
 
 Detailed evidence and limitations are documented in [docs/deployment-validation.md](docs/deployment-validation.md).
 
@@ -132,7 +153,8 @@ A reused authenticated session restored prior history and answered the follow-up
 
 ![CloudWatch custom metrics summary](docs/evidence/09-cloudwatch-custom-metrics.png)
 
-CloudWatch received EMF metrics; the two failures shown came from controlled validation before the sampling-parameter fix.
+CloudWatch received EMF metrics; the two failures shown came from controlled
+validation before the sampling-parameter fix.
 
 ![Terraform destroy validation showing no managed resources remaining](docs/evidence/10-terraform-destroy-validation.png)
 
@@ -156,9 +178,12 @@ ScanIndexForward = false
 Limit = history_turns
 ```
 
-The Lambda reverses selected items back to chronological order before Bedrock receives them. Invalid stored records are skipped without unbounded backfill.
+The Lambda reverses selected items back to chronological order before Bedrock
+receives them. Invalid stored records are skipped without unbounded backfill.
 
-The caller-facing `session_id` is deterministically base64url-encoded before it is used in the sort key. This prevents delimiter and prefix-boundary confusion for values containing characters such as `#`, `/`, spaces, or Unicode.
+The caller-facing `session_id` is deterministically base64url-encoded before it
+is used in the sort key. This prevents delimiter and prefix-boundary confusion
+for values containing characters such as `#`, `/`, spaces, or Unicode.
 
 The sort key also includes a generated turn ID so same-millisecond writes do not overwrite each other.
 
@@ -174,13 +199,20 @@ expires_at = current epoch seconds + CHAT_RETENTION_DAYS
 
 Terraform enables DynamoDB TTL on `expires_at`. The default retention in `live/dev` is 7 days.
 
-DynamoDB TTL deletion is asynchronous. Expired items can remain visible for some time and should not be treated as a strict real-time deletion mechanism.
+DynamoDB TTL deletion is asynchronous. Expired items can remain visible for some
+time and should not be treated as a strict real-time deletion mechanism.
 
 ## Bounded Context
 
-The Lambda keeps existing prompt and system prompt size limits and adds `MAX_CONTEXT_CHARS` for stored history sent to Bedrock.
+The Lambda keeps existing prompt and system prompt size limits and adds
+`MAX_CONTEXT_CHARS` for stored history sent to Bedrock.
 
-The budget is an approximate application-level character guardrail, not a tokenizer-accurate token counter. The current prompt is always preserved. Stored history is included as complete user/assistant turns, keeping the newest contiguous suffix that fits the budget and dropping older turns first. If the newest stored turn itself does not fit, history is omitted rather than keeping older context out of order.
+The budget is an approximate application-level character guardrail, not a
+tokenizer-accurate token counter. The current prompt is always preserved. Stored
+history is included as complete user/assistant turns, keeping the newest
+contiguous suffix that fits the budget and dropping older turns first. If the
+newest stored turn itself does not fit, history is omitted rather than keeping
+older context out of order.
 
 `system_prompt` is handled separately through the Bedrock Converse `system` field.
 
@@ -188,9 +220,12 @@ The budget is an approximate application-level character guardrail, not a tokeni
 
 The Lambda emits structured JSON logs and CloudWatch EMF metrics.
 
-Logged metadata includes service name, event name, request ID, hashed user/session identifiers, model ID, failure category, latency, history turn count, and context truncation status.
+Logged metadata includes service name, event name, request ID, hashed
+user/session identifiers, model ID, failure category, latency, history turn
+count, and context truncation status.
 
-The Lambda does not log prompts, system prompts, full request bodies, JWTs, Authorization headers, full history, or raw sensitive Bedrock response payloads.
+The Lambda does not log prompts, system prompts, full request bodies, JWTs,
+Authorization headers, full history, or raw sensitive Bedrock response payloads.
 
 Metrics include:
 
@@ -206,9 +241,12 @@ Metrics include:
 
 Metric dimensions avoid high-cardinality user IDs, session IDs, and request IDs.
 
-API Gateway `$default` stage access logs include request ID, route key, status, latency, integration latency, error summary, and source IP. Authorization headers are not logged.
+API Gateway `$default` stage access logs include request ID, route key, status,
+latency, integration latency, error summary, and source IP. Authorization
+headers are not logged.
 
-Terraform also defines selected alarms for Lambda errors, Lambda throttles, API 5XX, latency, DynamoDB throttles, and Bedrock throttle custom metrics.
+Terraform also defines selected alarms for Lambda errors, Lambda throttles, API
+5XX, latency, DynamoDB throttles, and Bedrock throttle custom metrics.
 
 ## Terraform
 
@@ -227,7 +265,8 @@ The `live/dev` root defines:
 - CloudWatch logs, metrics, selected alarms, dashboard, and cost alert examples
 - Native Terraform plan tests for Cognito, API Gateway, DynamoDB, IAM, log retention, and observability contracts
 
-The configuration validates and tests locally without deploying resources. Do not run `terraform apply` unless you intentionally want to create AWS resources.
+The configuration validates and tests locally without deploying resources. Do not
+run `terraform apply` unless you intentionally want to create AWS resources.
 
 ## Local Validation
 
@@ -270,8 +309,13 @@ CI runs these checks without AWS credentials or deployment.
 
 - The live AWS evidence is a time-bounded dev environment validation, not proof of a continuously running environment.
 - The validated resources were destroyed after testing.
-- The Cognito app client keeps SRP enabled; `ALLOW_ADMIN_USER_PASSWORD_AUTH` is only for IAM-authenticated CLI deployment validation and does not mean public clients should use administrator authentication APIs.
-- AWS Marketplace and Anthropic model access are account-level external prerequisites and are not Terraform-managed project resources.
+- The Cognito app client keeps SRP enabled; `ALLOW_ADMIN_USER_PASSWORD_AUTH` is
+  only for IAM-authenticated CLI deployment validation and does not mean public
+  clients should use administrator authentication APIs.
+- AWS Marketplace and Anthropic model access are account-level external
+  prerequisites and are not Terraform-managed project resources.
 - Cost controls are alerts and bounded request inputs, not hard spend enforcement.
 - DynamoDB TTL is asynchronous.
-- The API does not include RAG, vector storage, streaming, frontend UI, file uploads, tool calling, per-user quota enforcement, WAF, custom domains, multi-region deployment, or automatic deployment.
+- The API does not include RAG, vector storage, streaming, frontend UI, file
+  uploads, tool calling, per-user quota enforcement, WAF, custom domains,
+  multi-region deployment, or automatic deployment.
