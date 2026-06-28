@@ -202,7 +202,7 @@ resource "aws_cloudwatch_metric_alarm" "bedrock_throttles" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 1
   metric_name         = "BedrockThrottleCount"
-  namespace           = "AwsGenAiStarter"
+  namespace           = var.metric_service_name
   period              = 60
   statistic           = "Sum"
   threshold           = 1

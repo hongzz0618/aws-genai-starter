@@ -459,7 +459,7 @@ function emitMetrics(input: {
     _aws: {
       Timestamp: Date.now(),
       CloudWatchMetrics: [{
-        Namespace: "AwsGenAiStarter",
+        Namespace: SERVICE_NAME,
         Dimensions: dimensions,
         Metrics: input.metrics.map((metric) => ({
           Name: metric.name,

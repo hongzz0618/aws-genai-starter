@@ -89,8 +89,8 @@ describe("terraform authenticated API configuration", () => {
     expect(observabilityMain).toContain('metric_name         = "Throttles"');
     expect(observabilityMain).toContain('resource "aws_cloudwatch_metric_alarm" "bedrock_throttles"');
     expect(observabilityMain).toContain('metric_name         = "BedrockThrottleCount"');
-    expect(observabilityMain).toContain('namespace           = "AwsGenAiStarter"');
+    expect(observabilityMain).toContain("namespace           = var.metric_service_name");
     expect(observabilityMain).toContain("Service     = var.metric_service_name");
-    expect(liveMain).toContain('metric_service_name = "aws-genai-starter"');
+    expect(liveMain).toContain('metric_service_name = "aws-bedrock-chat-backend"');
   });
 });

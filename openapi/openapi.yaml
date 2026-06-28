@@ -24,7 +24,7 @@ components:
           const: ok
         service:
           type: string
-          const: aws-genai-starter
+          const: aws-bedrock-chat-backend
     ChatRequest:
       type: object
       description: temperature and top_p are mutually exclusive. Supply at most one.

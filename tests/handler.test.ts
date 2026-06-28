@@ -125,7 +125,7 @@ describe("handler", () => {
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toEqual({
       status: "ok",
-      service: "aws-genai-starter",
+      service: "aws-bedrock-chat-backend",
     });
   });
 

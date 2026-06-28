@@ -1,6 +1,6 @@
 variable "project" {
   type    = string
-  default = "aws-genai-starter"
+  default = "aws-bedrock-chat-backend"
 }
 
 variable "region" {
@@ -92,7 +92,7 @@ variable "alarm_email" {
 variable "tags" {
   type = map(string)
   default = {
-    App    = "aws-genai-starter"
+    App    = "aws-bedrock-chat-backend"
     Domain = "genai"
   }
 }

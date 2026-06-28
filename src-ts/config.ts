@@ -1,4 +1,4 @@
-export const SERVICE_NAME = "aws-genai-starter";
+export const SERVICE_NAME = "aws-bedrock-chat-backend";
 
 export interface AppConfig {
   chatTable?: string;

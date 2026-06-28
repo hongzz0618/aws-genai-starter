@@ -119,7 +119,7 @@ module "observability" {
   source              = "../../modules/observability"
   project             = var.project
   environment         = var.env
-  metric_service_name = "aws-genai-starter"
+  metric_service_name = "aws-bedrock-chat-backend"
   region              = var.region
 
   tags = {

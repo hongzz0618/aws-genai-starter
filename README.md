@@ -62,7 +62,7 @@ No authentication required.
 ```json
 {
   "status": "ok",
-  "service": "aws-genai-starter"
+  "service": "aws-bedrock-chat-backend"
 }
 ```
 

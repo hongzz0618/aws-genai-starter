@@ -13,7 +13,7 @@ terraform {
   #
   # backend "s3" {
   #   bucket         = "example-terraform-state-bucket"
-  #   key            = "aws-genai-starter/dev/terraform.tfstate"
+  #   key            = "aws-bedrock-chat-backend/dev/terraform.tfstate"
   #   region         = "us-east-1"
   #   dynamodb_table = "example-terraform-locks"
   #   encrypt        = true

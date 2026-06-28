@@ -66,7 +66,7 @@ run "cognito_contract" {
   }
 
   variables {
-    name = "aws-genai-starter-dev-auth"
+    name = "aws-bedrock-chat-backend-dev-auth"
   }
 
   assert {
@@ -114,9 +114,9 @@ run "api_gateway_contract" {
   }
 
   variables {
-    name        = "aws-genai-starter-dev-http"
-    lambda_arn  = "arn:aws:lambda:us-east-1:123456789012:function:aws-genai-starter-api-dev"
-    lambda_name = "aws-genai-starter-api-dev"
+    name        = "aws-bedrock-chat-backend-dev-http"
+    lambda_arn  = "arn:aws:lambda:us-east-1:123456789012:function:aws-bedrock-chat-backend-api-dev"
+    lambda_name = "aws-bedrock-chat-backend-api-dev"
     jwt_authorizers = {
       cognito = {
         issuer   = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_example"
@@ -217,7 +217,7 @@ run "lambda_iam_bedrock_contract" {
   }
 
   variables {
-    name           = "aws-genai-starter-dev-lambda"
+    name           = "aws-bedrock-chat-backend-dev-lambda"
     enable_bedrock = true
     bedrock_inference_profile_arns = [
       "arn:aws:bedrock:eu-west-1:123456789012:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
@@ -265,8 +265,8 @@ run "lambda_log_retention_contract" {
   }
 
   variables {
-    function_name      = "aws-genai-starter-api-dev"
-    role_arn           = "arn:aws:iam::123456789012:role/aws-genai-starter-dev-lambda-role"
+    function_name      = "aws-bedrock-chat-backend-api-dev"
+    role_arn           = "arn:aws:iam::123456789012:role/aws-bedrock-chat-backend-dev-lambda-role"
     runtime            = "nodejs22.x"
     handler            = "handler.handler"
     zip_path           = "../../build/lambda.zip"
@@ -287,13 +287,13 @@ run "observability_contract" {
   }
 
   variables {
-    project               = "aws-genai-starter"
+    project               = "aws-bedrock-chat-backend"
     environment           = "dev"
-    metric_service_name   = "aws-genai-starter"
+    metric_service_name   = "aws-bedrock-chat-backend"
     region                = "us-east-1"
-    lambda_function_names = ["aws-genai-starter-api-dev"]
+    lambda_function_names = ["aws-bedrock-chat-backend-api-dev"]
     lambda_log_group_names = {
-      "aws-genai-starter-api-dev" = "/aws/lambda/aws-genai-starter-api-dev"
+      "aws-bedrock-chat-backend-api-dev" = "/aws/lambda/aws-bedrock-chat-backend-api-dev"
     }
     api_gw_type           = "http_v2"
     apigw_http_api_id     = "api123"
@@ -305,12 +305,12 @@ run "observability_contract" {
   }
 
   assert {
-    condition     = aws_cloudwatch_metric_alarm.lambda_errors["aws-genai-starter-api-dev"].threshold == 1
+    condition     = aws_cloudwatch_metric_alarm.lambda_errors["aws-bedrock-chat-backend-api-dev"].threshold == 1
     error_message = "Lambda error alarms must be present."
   }
 
   assert {
-    condition     = aws_cloudwatch_metric_alarm.lambda_throttles["aws-genai-starter-api-dev"].metric_name == "Throttles"
+    condition     = aws_cloudwatch_metric_alarm.lambda_throttles["aws-bedrock-chat-backend-api-dev"].metric_name == "Throttles"
     error_message = "Lambda throttle alarms must be present."
   }
 
@@ -320,7 +320,7 @@ run "observability_contract" {
   }
 
   assert {
-    condition     = aws_cloudwatch_metric_alarm.bedrock_throttles.dimensions["Service"] == "aws-genai-starter"
+    condition     = aws_cloudwatch_metric_alarm.bedrock_throttles.dimensions["Service"] == "aws-bedrock-chat-backend"
     error_message = "Bedrock throttle alarm must include the explicit Service dimension."
   }
 }
